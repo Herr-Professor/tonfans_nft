@@ -391,112 +391,225 @@ async def search_user(message: types.Message):
             
             await message.answer(report)
 
-@dp.message(Command('to_kick'))
-async def check_nft_holders(message: types.Message):
+@dp.message(Command('kick'))
+async def kick_member(message: types.Message):
     if str(message.from_user.id) not in ADMIN_IDS:
         return
-    
-    await message.answer("🔍 Checking all wallets for users without NFTs... Please wait.")
-    
-    conn = sqlite3.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, username, wallet_address FROM members WHERE wallet_address IS NOT NULL')
-    members = cursor.fetchall()
-    conn.close()
-    
-    no_nft_holders = []
-    for user_id, username, wallet_address in members:
-        has_nft = await check_nft_ownership(wallet_address)
-        if not has_nft:
-            no_nft_holders.append({
-                'username': username or "Unknown",
-                'wallet': wallet_address,
-                'user_id': user_id
-            })
-            await save_user_data(user_id, username, wallet_address, False)
-    
-    if no_nft_holders:
-        report = "🚫 Users to be kicked (no NFTs):\n\n"
-        for user in no_nft_holders:
-            report += f"• @{user['username']}\n"
-            report += f"  Wallet: {user['wallet']}\n"
-            report += f"  User ID: {user['user_id']}\n\n"
-    else:
-        report = "✅ All users currently hold NFTs!"
-    
-    await message.answer(report)
+        
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("❌ Usage: /kick <user_id>")
+        return
+        
+    try:
+        user_id = int(args[1])
+        # Attempt to kick the user
+        try:
+            chat_id = message.chat.id  # This will be the group's ID
+            member = await bot.get_chat_member(chat_id, user_id)
+            
+            if member.status in ['left', 'kicked']:
+                await message.answer(f"User {user_id} is not in the group.")
+                return
+                
+            await bot.ban_chat_member(chat_id, user_id)
+            
+            # Try to notify the user
+            try:
+                await bot.send_message(
+                    user_id,
+                    "You have been removed from the group because you no longer hold the required NFT. "
+                    "You can rejoin after acquiring a new NFT from our collection."
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify kicked user {user_id}: {e}")
+            
+            # Notify admin of successful kick
+            await message.answer(f"✅ Successfully kicked user {user_id} from the group.")
+            
+            # Update database
+            conn = sqlite3.connect('members.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT username, wallet_address FROM members WHERE user_id = ?', (user_id,))
+            user_data = cursor.fetchone()
+            if user_data:
+                username, wallet = user_data
+                await notify_admin(
+                    f"🚫 Kicked User Details:\n"
+                    f"User ID: `{user_id}`\n"
+                    f"Username: @{username or 'Unknown'}\n"
+                    f"Wallet: `{wallet or 'Unknown'}`"
+                )
+            conn.close()
+            
+        except Exception as e:
+            await message.answer(f"❌ Failed to kick user {user_id}: {str(e)}")
+            logger.error(f"Kick error for {user_id}: {e}")
+            
+    except ValueError:
+        await message.answer("❌ Invalid user ID format. Please provide a valid numeric ID.")
 
 @dp.message(Command('mem'))
 async def list_nft_holders(message: types.Message):
     if str(message.from_user.id) not in ADMIN_IDS:
         return
     
-    await message.answer("📋 Fetching current NFT holders... Please wait.")
+    await message.answer("📋 Analyzing group members and NFT holders... Please wait.")
     
-    conn = sqlite3.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, username, wallet_address FROM members')
-    members = cursor.fetchall()
-    conn.close()
-    
-    nft_holders = []
-    for user_id, username, wallet_address in members:
-        has_nft = await check_nft_ownership(wallet_address)
-        if has_nft:
-            nft_holders.append({
-                'username': username or "Unknown",
-                'wallet': wallet_address,
-                'user_id': user_id
-            })
-    
-    if nft_holders:
-        report = "💎 Current NFT Holders:\n\n"
-        for user in nft_holders:
-            report += f"• @{user['username']}\n"
-            report += f"  Wallet: {user['wallet']}\n"
-            report += f"  User ID: {user['user_id']}\n\n"
-    else:
-        report = "❌ No NFT holders found in database!"
-    
-    await message.answer(report)
+    try:
+        # Get all group members
+        chat_id = message.chat.id
+        group_members = []
+        async for member in bot.get_chat_members(chat_id):
+            if not member.user.is_bot:
+                group_members.append({
+                    'user_id': member.user.id,
+                    'username': member.user.username or "Unknown"
+                })
+        
+        # Get database members
+        conn = sqlite3.connect('members.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT user_id, username, wallet_address FROM members')
+        db_members = cursor.fetchall()
+        conn.close()
+        
+        # Track verified NFT holders
+        verified_holders = []
+        group_only = []
+        db_only = []
+        
+        # Check group members against database
+        for group_member in group_members:
+            db_match = next((m for m in db_members if m[0] == group_member['user_id']), None)
+            
+            if db_match:
+                wallet = db_match[2]
+                if wallet:
+                    has_nft = await check_nft_ownership(wallet)
+                    if has_nft:
+                        verified_holders.append({
+                            'username': group_member['username'],
+                            'user_id': group_member['user_id'],
+                            'wallet': wallet
+                        })
+                    else:
+                        db_only.append({
+                            'username': group_member['username'],
+                            'user_id': group_member['user_id'],
+                            'wallet': wallet,
+                            'status': 'No NFT'
+                        })
+            else:
+                group_only.append({
+                    'username': group_member['username'],
+                    'user_id': group_member['user_id'],
+                    'status': 'Not verified'
+                })
+        
+        # Prepare report
+        report = [
+            f"💎 Total Verified NFT Holders: {len(verified_holders)}",
+            "\nVerified Holders in Group:",
+            *[f"• @{h['username']} (ID: {h['user_id']})\n  Wallet: {h['wallet']}" 
+              for h in verified_holders],
+            f"\n👥 Members in Group Only (Not in Database): {len(group_only)}",
+            *[f"• @{m['username']} (ID: {m['user_id']})" for m in group_only],
+            f"\n⚠️ Database Members Without NFT: {len(db_only)}",
+            *[f"• @{m['username']} (ID: {m['user_id']})\n  Wallet: {m['wallet']}" 
+              for m in db_only]
+        ]
+        
+        # Split report if too long
+        report_text = "\n".join(report)
+        if len(report_text) > 4000:
+            chunks = [report_text[i:i+4000] for i in range(0, len(report_text), 4000)]
+            for chunk in chunks:
+                await message.answer(chunk)
+        else:
+            await message.answer(report_text)
+            
+    except Exception as e:
+        await message.answer(f"❌ Error analyzing members: {str(e)}")
+        logger.error(f"Member analysis error: {e}")
 
-# Periodic verification system
-async def verify_all_members():
-    conn = sqlite3.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, username, wallet_address FROM members')
-    members = cursor.fetchall()
-    conn.close()
+@dp.message(Command('to_kick'))
+async def check_nft_holders(message: types.Message):
+    if str(message.from_user.id) not in ADMIN_IDS:
+        return
     
-    removed_members = []
-    for user_id, username, wallet_address in members:
-        has_nft = await check_nft_ownership(wallet_address)
-        
-        if not has_nft:
-            removed_members.append((username or "Unknown", wallet_address))
-            try:
-                # Notify user about removal
-                await bot.send_message(
-                    user_id,
-                    "⚠️ You have been removed from the group because you no longer hold the required NFT. "
-                    "You can rejoin after acquiring a new NFT from our collection."
-                )
-                # Kick user from group (requires bot to be admin)
-                try:
-                    chat_id = GROUP_INVITE_LINK.split('/')[-1]  # Extract chat ID from invite link
-                    await bot.ban_chat_member(chat_id, user_id)
-                except Exception as e:
-                    logger.error(f"Failed to kick user {user_id}: {e}")
-            except Exception as e:
-                logger.error(f"Failed to notify user {user_id}: {e}")
-        
-        await save_user_data(user_id, username, wallet_address, has_nft)
+    await message.answer("🔍 Checking group members for users without NFTs... Please wait.")
     
-    if removed_members:
-        report = "🚨 Members removed (no longer hold NFT):\n\n"
-        for username, wallet in removed_members:
-            report += f"• @{username}\n  Wallet: {wallet}\n\n"
-        await notify_admin(report)
+    try:
+        # Get all group members
+        chat_id = message.chat.id
+        group_members = []
+        async for member in bot.get_chat_members(chat_id):
+            if not member.user.is_bot:
+                group_members.append({
+                    'user_id': member.user.id,
+                    'username': member.user.username or "Unknown"
+                })
+        
+        # Get database members
+        conn = sqlite3.connect('members.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT user_id, username, wallet_address FROM members')
+        db_members = cursor.fetchall()
+        conn.close()
+        
+        to_kick = []
+        unverified = []
+        
+        # Check each group member
+        for group_member in group_members:
+            db_match = next((m for m in db_members if m[0] == group_member['user_id']), None)
+            
+            if db_match:
+                wallet = db_match[2]
+                if wallet:
+                    has_nft = await check_nft_ownership(wallet)
+                    if not has_nft:
+                        to_kick.append({
+                            'username': group_member['username'],
+                            'user_id': group_member['user_id'],
+                            'wallet': wallet,
+                            'reason': 'No NFT'
+                        })
+                else:
+                    unverified.append({
+                        'username': group_member['username'],
+                        'user_id': group_member['user_id'],
+                        'reason': 'No wallet'
+                    })
+            else:
+                unverified.append({
+                    'username': group_member['username'],
+                    'user_id': group_member['user_id'],
+                    'reason': 'Not in database'
+                })
+        
+        # Prepare report
+        report = [
+            f"🚫 Users to Kick (Sold NFT): {len(to_kick)}",
+            *[f"• @{u['username']}\n  ID: {u['user_id']}\n  Wallet: {u['wallet']}\n  To kick use: /kick {u['user_id']}" 
+              for u in to_kick],
+            f"\n⚠️ Unverified Users: {len(unverified)}",
+            *[f"• @{u['username']}\n  ID: {u['user_id']}\n  Reason: {u['reason']}" 
+              for u in unverified]
+        ]
+        
+        report_text = "\n".join(report)
+        if len(report_text) > 4000:
+            chunks = [report_text[i:i+4000] for i in range(0, len(report_text), 4000)]
+            for chunk in chunks:
+                await message.answer(chunk)
+        else:
+            await message.answer(report_text)
+            
+    except Exception as e:
+        await message.answer(f"❌ Error checking members: {str(e)}")
+        logger.error(f"Member check error: {e}")
 
 # Scheduled verification task
 async def scheduled_check():
