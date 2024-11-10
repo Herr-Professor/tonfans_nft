@@ -1,7 +1,9 @@
 import asyncio
 import aiohttp
 import base64
+import json
 import requests
+from typing import Tuple, List, Dict
 import time as time_module
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
@@ -23,6 +25,7 @@ ADMIN_IDS = ["1499577590","5851290427"]
 VERIFICATION_WALLET = "UQA53kg3IzUo2PTuaZxXB3qK7fICyc1u_Yu8d0JDYJRPVWpz"
 TON_API_KEY = "6767227019a948426ee2ef5a310f490e43cc1ca23363b932303002e59988f833"
 GROUP_ID = -1002476568928
+BASE_URL = "https://toncenter.com/api/v3"
 WELCOME_IMAGE_PATH = "boris.jpg"
 
 # Initialize bot and dispatcher
@@ -167,6 +170,77 @@ async def check_transaction(address: str, memo: str) -> bool:
             logger.error(f"Error checking transaction: {str(e)}")
             return False
 
+async def check_nft_royalties(wallet_address: str) -> Tuple[int, int, int, List[Dict]]:
+    """
+    Check royalty payment status for NFTs in a wallet.
+    Returns: (paid_royalties, unpaid_royalties, no_transfer_info, nft_details)
+    """
+    nft_response = requests.get(
+        f"{BASE_URL}/nft/items",
+        params={
+            "owner_address": wallet_address,
+            "collection_address": NFT_COLLECTION_ADDRESS,
+            "limit": 25,
+            "offset": 0
+        },
+        headers={"accept": "application/json"}
+    )
+    
+    nft_data = nft_response.json()
+    nft_items = nft_data.get("nft_items", [])
+    
+    paid_royalties = 0
+    unpaid_royalties = 0
+    no_transfer_info = 0
+    nft_details = []
+    
+    for nft in nft_items:
+        nft_address = nft["address"]
+        nft_index = nft.get("index", "Unknown")
+        
+        transfer_response = requests.get(
+            f"{BASE_URL}/nft/transfers",
+            params={
+                "owner_address": wallet_address,
+                "item_address": nft_address,
+                "collection_address": NFT_COLLECTION_ADDRESS,
+                "direction": "in",
+                "limit": 25,
+                "offset": 0,
+                "sort": "desc"
+            },
+            headers={"accept": "application/json"}
+        )
+        
+        transfer_data = transfer_response.json()
+        transfers = transfer_data.get("nft_transfers", [])
+        
+        if transfers:
+            latest_transfer = transfers[0]
+            forward_amount = latest_transfer.get("forward_amount")
+            
+            nft_status = {
+                "index": nft_index,
+                "royalty_paid": forward_amount != "1",
+                "transfer_info": True
+            }
+            
+            if forward_amount == "1":
+                unpaid_royalties += 1
+            else:
+                paid_royalties += 1
+        else:
+            nft_status = {
+                "index": nft_index,
+                "royalty_paid": None,
+                "transfer_info": False
+            }
+            no_transfer_info += 1
+            
+        nft_details.append(nft_status)
+    
+    return paid_royalties, unpaid_royalties, no_transfer_info, nft_details
+
 # Wallet submission handler
 @dp.message(UserState.waiting_for_wallet)
 async def handle_wallet_input(message: types.Message, state: FSMContext):
@@ -294,14 +368,12 @@ async def handle_wallet_input(message: types.Message, state: FSMContext):
     )
     await notify_admin(admin_message)
 
-# Update the verify command handler with admin notifications
 @dp.message(Command('verify'))
 async def verify_command(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     username = message.from_user.username or "Anonymous"
     user_data = await get_user_data(user_id)
     
-    # Notify admin about verification attempt
     await notify_admin(f"🔍 *Verification Attempt:*\n"
                       f"User: @{username}\n"
                       f"ID: `{user_id}`")
@@ -319,7 +391,6 @@ async def verify_command(message: types.Message, state: FSMContext):
     
     await message.answer("🔍 Checking your verification transaction...")
     
-    # Check if transaction exists
     transaction_verified = await check_transaction(VERIFICATION_WALLET, verification_memo)
     
     if not transaction_verified:
@@ -339,23 +410,52 @@ async def verify_command(message: types.Message, state: FSMContext):
                       f"Wallet: `{wallet_address}`\n"
                       f"Checking NFT ownership...")
     
-    # Check NFT ownership
     has_nft = await check_nft_ownership(wallet_address)
     await save_user_data(user_id, user_data[1], wallet_address, has_nft)
     
     if has_nft:
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Join Group", url=GROUP_INVITE_LINK)]
-        ])
-        await message.answer(
-            "🎉 Congratulations! Your wallet is verified and your tonfans NFT ownership confirmed.\n"
-            "You can now join our exclusive group:",
-            reply_markup=keyboard
+        # Check NFT royalties
+        await message.answer("🔍 Checking NFT royalty status...")
+        paid, unpaid, no_info, nft_details = await check_nft_royalties(wallet_address)
+        
+        # Prepare royalty status message
+        royalty_status = (
+            "📊 NFT Royalty Status:\n"
+            f"✅ NFTs with paid royalties: {paid}\n"
+            f"❌ NFTs without royalties: {unpaid}\n"
+            f"ℹ️ NFTs with no transfer info: {no_info}\n\n"
+            "Detailed NFT Status:\n"
         )
-        await notify_admin(f"✅ *NFT Verification Successful:*\n"
-                         f"User: @{username}\n"
-                         f"ID: `{user_id}`\n"
-                         f"Wallet: `{wallet_address}`")
+        
+        for nft in nft_details:
+            if nft["transfer_info"]:
+                status = "✅ Royalty paid" if nft["royalty_paid"] else "❌ Royalty not paid"
+            else:
+                status = "ℹ️ No transfer information"
+            royalty_status += f"NFT #{nft['index']}: {status}\n"
+        
+        await message.answer(royalty_status)
+        
+        # Create keyboard with both group and marketplace links
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Join Group", url=GROUP_INVITE_LINK)],
+            [InlineKeyboardButton(text="NFT Marketplace", url=NFT_MARKETPLACE_LINK)]
+        ])
+        
+        join_message = "🎉 Congratulations! Your wallet is verified and your tonfans NFT ownership confirmed."
+        if unpaid > 0:
+            join_message += "\n⚠️ Some of your NFTs have unpaid royalties. Please consider paying them to support the project."
+        join_message += "\nYou can now join our exclusive group:"
+        
+        await message.answer(join_message, reply_markup=keyboard)
+        
+        await notify_admin(
+            f"✅ *NFT Verification Successful:*\n"
+            f"User: @{username}\n"
+            f"ID: `{user_id}`\n"
+            f"Wallet: `{wallet_address}`\n"
+            f"Royalty Status: {paid} paid, {unpaid} unpaid, {no_info} unknown"
+        )
     else:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Buy NFT", url=NFT_MARKETPLACE_LINK)]
@@ -373,6 +473,42 @@ async def verify_command(message: types.Message, state: FSMContext):
     
     await state.clear()
 
+# Add a new command to check royalties separately
+@dp.message(Command('royalties'))
+async def check_royalties_command(message: types.Message):
+    user_id = message.from_user.id
+    user_data = await get_user_data(user_id)
+    
+    if not user_data or not user_data[2]:  # Check if user has registered wallet
+        await message.answer("❌ Please register your wallet first using /start command.")
+        return
+    
+    wallet_address = user_data[2]
+    await message.answer("🔍 Checking NFT royalty status...")
+    
+    paid, unpaid, no_info, nft_details = await check_nft_royalties(wallet_address)
+    
+    royalty_status = (
+        "📊 NFT Royalty Status:\n"
+        f"✅ NFTs with paid royalties: {paid}\n"
+        f"❌ NFTs without royalties: {unpaid}\n"
+        f"ℹ️ NFTs with no transfer info: {no_info}\n\n"
+        "Detailed NFT Status:\n"
+    )
+    
+    for nft in nft_details:
+        if nft["transfer_info"]:
+            status = "✅ Royalty paid" if nft["royalty_paid"] else "❌ Royalty not paid"
+        else:
+            status = "ℹ️ No transfer information"
+        royalty_status += f"NFT #{nft['index']}: {status}\n"
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="NFT Marketplace", url=NFT_MARKETPLACE_LINK)]
+    ])
+    
+    await message.answer(royalty_status, reply_markup=keyboard)
+    
 @dp.message(Command('search'))
 async def search_user(message: types.Message):
     if str(message.from_user.id) not in ADMIN_IDS:
@@ -594,44 +730,6 @@ async def add_members_command(message: types.Message):
                 except Exception as e:
                     logger.error(f"Failed to notify admin {admin_id}: {e}")
 
-# Periodic verification system
-async def verify_all_members():
-    conn = sqlite3.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, username, wallet_address FROM members')
-    members = cursor.fetchall()
-    conn.close()
-    
-    removed_members = []
-    for user_id, username, wallet_address in members:
-        has_nft = await check_nft_ownership(wallet_address)
-        
-        if not has_nft:
-            removed_members.append((username or "Unknown", wallet_address))
-            try:
-                # Notify user about removal
-                await bot.send_message(
-                    user_id,
-                    "⚠️ You have been removed from the group because you no longer hold the required NFT. "
-                    "You can rejoin after acquiring a new NFT from our collection."
-                )
-                # Kick user from group (requires bot to be admin)
-                try:
-                    chat_id = GROUP_INVITE_LINK.split('/')[-1]  # Extract chat ID from invite link
-                    await bot.ban_chat_member(chat_id, user_id)
-                except Exception as e:
-                    logger.error(f"Failed to kick user {user_id}: {e}")
-            except Exception as e:
-                logger.error(f"Failed to notify user {user_id}: {e}")
-        
-        await save_user_data(user_id, username, wallet_address, has_nft)
-    
-    if removed_members:
-        report = "🚨 Members removed (no longer hold NFT):\n\n"
-        for username, wallet in removed_members:
-            report += f"• @{username}\n  Wallet: {wallet}\n\n"
-        await notify_admin(report)
-
 @dp.message(Command("group_info"))
 async def get_group_info(message: Message):
     try:
@@ -751,24 +849,10 @@ async def send_group_message(message: Message):
     except Exception as e:
         await message.reply(f"Error sending message: {str(e)}")
 
-# Scheduled verification task
-async def scheduled_check():
-    while True:
-        now = datetime.now().time()
-        # Check at 00:00 and 12:00
-        if now.hour in [0, 12] and now.minute == 0:
-            logger.info("Starting scheduled NFT verification")
-            await verify_all_members()
-            await asyncio.sleep(3600)  # Sleep for an hour after check
-        await asyncio.sleep(30)
-
 # Main function
 async def main():
     print("Starting NFT Checker Bot...")
     setup_database()
-
-    # Start periodic checks
-    asyncio.create_task(scheduled_check())
     
     try:
         await dp.start_polling(bot)
