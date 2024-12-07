@@ -7,7 +7,7 @@ from typing import Tuple, List, Dict
 import time as time_module
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ChatMemberOwner, ChatMemberAdministrator, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ChatMemberOwner, ChatMemberAdministrator
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -27,8 +27,6 @@ TON_API_KEY = "6767227019a948426ee2ef5a310f490e43cc1ca23363b932303002e59988f833"
 GROUP_ID = -1002476568928
 BASE_URL = "https://toncenter.com/api/v3"
 WELCOME_IMAGE_PATH = "boris.jpg"
-TONAPI_KEY = "AHZNMH2YZTTI2NIAAAACRWPE4TMJORYEHELN4ADWSJYBYH475H4AN4FYZUNVNZV4JM74HJY"
-SHIVA_TOKEN_ADDRESS = "EQAQAYqUr9IDiiMQKvXXHtLhT77WvbhH7VGhvPPJmBVF3O7y"
 
 # Initialize bot and dispatcher
 bot = Bot(token=API_TOKEN)
@@ -37,198 +35,14 @@ dp = Dispatcher(storage=storage)
 logger = logging.getLogger(__name__)
 
 class UserState(StatesGroup):
-    selecting_language = State()
     waiting_for_wallet = State()
     waiting_for_transaction = State()
-
-# Add translations dictionary
-TRANSLATIONS = {
-    'en': {
-        'select_language': "🌐 Please select your language:",
-        'username_required': (
-            "❌ You need to set a username in Telegram before using this bot.\n\n"
-            "To set a username:\n"
-            "1. Go to Telegram Settings\n"
-            "2. Tap on your profile\n"
-            "3. Tap 'Username'\n"
-            "4. Set a username\n\n"
-            "Once you've set a username, come back and use /start again."
-        ),
-        'welcome_message': (
-            "👋 This is Boris.\nWelcome {}@{}!\n\n"
-            "I'm tonfans NFT checker bot. I'll help you verify your NFT "
-            "ownership and get access to our exclusive group.\n\n"
-            "Please send me your TON wallet address to begin verification."
-        ),
-        'invalid_wallet': "❌ Invalid wallet address format. Please send a valid TON wallet address.",
-        'verification_instructions': (
-            "To verify your wallet ownership, please:\n\n"
-            "1. Send a small transaction (0.01 TON) to this address:\n"
-            "`{}`\n\n"
-            "2. Include this exact memo in your transaction message:\n"
-            "`{}`\n\n"
-            "3. Use /verify command after sending the transaction.\n\n"
-            "I'll check for your transaction and verify your NFT ownership."
-        ),
-        'checking_transaction': "🔍 Checking your verification transaction...",
-        'transaction_not_found': (
-            "❌ Transaction not found. Please make sure you:\n\n"
-            "1. Sent 0.01 TON to:\n"
-            "`{0}`\n\n"
-            "2. Included this memo:\n"
-            "`{1}`\n\n"
-            "Try again with /verify after sending the transaction."
-        ),
-        'transaction_verified': "✅ Transaction verified! Now checking NFT ownership...",
-        'checking_royalties': "🔍 Checking NFT royalty status...",
-        'royalty_status': (
-            "📊 NFT Royalty Status:\n"
-            "✅ NFTs with paid royalties: {}\n"
-            "❌ NFTs without royalties: {}\n"
-            "ℹ️ NFTs with no transfer info: {}\n\n"
-            "Detailed NFT Status:\n"
-        ),
-        'nft_status_paid': "✅ Royalty paid",
-        'nft_status_unpaid': "❌ Royalty not paid",
-        'nft_status_unknown': "ℹ️ No transfer information",
-        'success_message': "🎉 Congratulations! Your wallet is verified and your tonfans NFT ownership confirmed.",
-        'royalty_warning': "\n⚠️ Some of your NFTs have unpaid royalties. Please consider paying them to support the project.",
-        'join_group': "\nYou can now join our exclusive group:",
-        'no_nft_found': (
-            "✅ Wallet verified but no NFT found in your wallet.\n"
-            "To join our group, you need to own at least one NFT from our collection.\n"
-            "You can get one here:"
-        ),
-        'join_group_button': "Join Group",
-        'buy_nft_button': "Buy NFT",
-        'nft_marketplace_button': "NFT Marketplace",
-        'token_balance': "Your $SHIVA balance: {:,.2f}",
-        'no_token_balance': "You don't have any $SHIVA tokens in your wallet.",
-        'start_verification': "Please start the verification process first using /start command.",
-        'no_pending_verification': "No pending verification found. Please start over using /start command.",
-        'admin_new_verification': (
-            "🆕 *New Verification Attempt:*\n"
-            "User: @{}\n"
-            "ID: `{}`\n"
-            "Wallet: `{}`\n"
-            "Verification Memo: `{}`"
-        ),
-        'admin_verification_success': (
-            "✅ NFT Verification Successful:\n"
-            "User: @{}\n"
-            "ID: {}\n"
-            "Wallet: {}\n"
-            "$SHIVA Balance: {:.2f}\n"
-            "Royalty Status: {} paid, {} unpaid, {} unknown"
-        ),
-        'admin_no_nft': (
-            "❌ *No NFT Found:*\n"
-            "User: @{}\n"
-            "ID: `{}`\n"
-            "Wallet: `{}`"
-        )
-    },
-    'ru': {
-        'select_language': "🌐 Пожалуйста, выберите язык:",
-        'username_required': (
-            "❌ Прежде чем использовать этого бота, вам нужно установить имя пользователя в Telegram.\n\n"
-            "Чтобы установить имя пользователя:\n"
-            "1. Перейдите в настройки Telegram\n"
-            "2. Нажмите на свой профиль\n"
-            "3. Нажмите 'Имя пользователя'\n"
-            "4. Установите имя пользовател\n\n"
-            "После установки имени пользователя вернитесь и снова используйте команду /start."
-        ),
-        'welcome_message': (
-            "👋 Это Борис.\nДобро ��ожаловать {}@{}!\n\n"
-            "Я бот-проверщик NFT tonfans. Я помогу вам проверить владение NFT "
-            "и получить доступ к нашей эксклюзивной группе.\n\n"
-            "Пожалуйста, отправьте мне адрес вашего TON кошелька для начала проверки."
-        ),
-        'invalid_wallet': "❌ Неверный формат адреса кошелька. Пожалуйста, отправьте действительный адрес TON кошелька.",
-        'verification_instructions': (
-            "Для подтверждения владения кошельком, пожалуйста:\n\n"
-            "1. Отправьте небольшую транзакцию (0.01 TON) на этот адрес:\n"
-            "`{}`\n\n"
-            "2. Включите это точное сообщение в вашу транзакцию:\n"
-            "`{}`\n\n"
-            "3. Используйте команду /verify после отправки транзакции.\n\n"
-            "Я проверю вашу транзакцию и владение NFT."
-        ),
-        'checking_transaction': "🔍 Проверяю вашу транзакц��ю...",
-        'transaction_not_found': (
-            "❌ Транзакция не найдена. Пожалуйста, убедитесь, что вы:\n\n"
-            "1. Отправили 0.01 TON на:\n"
-            "`{0}`\n\n"
-            "2. Включили это сообщение:\n"
-            "`{1}`\n\n"
-            "Попробуйте снова с командой /verify после отправки транзакции."
-        ),
-        'transaction_verified': "✅ Транзакция подтверждена! Теперь проверяю владение NFT...",
-        'checking_royalties': "🔍 Проверяю стат���с роялти NFT...",
-        'royalty_status': (
-            "📊 Статус роялти NFT:\n"
-            "✅ NFT с оплаченными роялти: {}\n"
-            "❌ NFT без роялти: {}\n"
-            "ℹ️ NFT без информации о переводе: {}\n\n"
-            "Подробный статус NFT:\n"
-        ),
-        'nft_status_paid': "✅ Роялти ��плачено",
-        'nft_status_unpaid': "❌ Роялти не оплачено",
-        'nft_status_unknown': "ℹ️ Нет информации о переводе",
-        'success_message': "🎉 Поздравляем! Ваш кошелек подтвержден и владение NFT tonfans подтверждено.",
-        'royalty_warning': "\n⚠️ Некоторые из ваших NFT имеют неоплаченные роялти. Пожалуйста, рассмотрит�� возможность их оплаты для поддержки проекта.",
-        'join_group': "\nТеперь вы можете присоединиться к нашей эксклюзивной группе:",
-        'no_nft_found': (
-            "✅ Кошелек подтвержден, но NFT не найден в вашем кошельке.\n"
-            "Чтобы присоединиться к нашей группе, вам нужно владеть хотя бы одним NFT из нашей коллекции.\n"
-            "Вы можете получить его здесь:"
-        ),
-        'join_group_button': "Присоединиться к группе",
-        'buy_nft_button': "Купит���� NFT",
-        'nft_marketplace_button': "NFT Маркетп��ес",
-        'token_balance': "Ваш баланс $SHIVA: {:,.2f}",
-        'no_token_balance': "У вас нет токенов $SHIVA в кошельке.",
-        'start_verification': "Пожалуйста, сначала начните процесс верификации, используя команду /start.",
-        'no_pending_verification': "Не найдено неотправленных запросов на верификацию. Пожалуйста, начните снова, используя команду /start.",
-        'admin_new_verification': (
-            "�� *Новый запрос на верификацию:*\n"
-            "Пользователь: @{}\n"
-            "ID: `{}`\n"
-            "Кошелек: `{}`\n"
-            "Memo: `{}`"
-        ),
-        'admin_verification_success': (
-            "✅ *Верификация NFT успешно завершена:*\n"
-            "Пользователь: @{}\n"
-            "ID: `{}`\n"
-            "Кошелек: `{}`\n"
-            "$SHIVA Balance: {:.2f}\n"
-            "Статус роялти: {} оплачено, {} не оплачено, {} неизвестно"
-        ),
-        'admin_no_nft': (
-            "❌ *NFT не найден:*\n"
-            "Пользователь: @{}\n"
-            "ID: `{}`\n"
-            "Кошелек: `{}`"
-        )
-    }
-}
 
 # Database setup
 
 def setup_database():
     conn = sqlite3.connect('members.db')
     cursor = conn.cursor()
-    
-    # First, check if the language column exists
-    cursor.execute("PRAGMA table_info(members)")
-    columns = [column[1] for column in cursor.fetchall()]
-    
-    if 'language' not in columns:
-        # Add language column if it doesn't exist
-        cursor.execute('ALTER TABLE members ADD COLUMN language TEXT DEFAULT "en"')
-    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS members (
             user_id INTEGER PRIMARY KEY,
@@ -236,8 +50,7 @@ def setup_database():
             wallet_address TEXT,
             last_checked TIMESTAMP,
             has_nft BOOLEAN,
-            verification_memo TEXT,
-            language TEXT DEFAULT 'en'
+            verification_memo TEXT
         )
     ''')
     conn.commit()
@@ -250,8 +63,6 @@ async def get_user_data(user_id: int):
     cursor.execute('SELECT * FROM members WHERE user_id = ?', (user_id,))
     result = cursor.fetchone()
     conn.close()
-    if result and len(result) < 7:  # If language is not in the result
-        return (*result, 'en')  # Add default language
     return result
 
 async def get_user_by_wallet(wallet_address: str):
@@ -265,28 +76,11 @@ async def get_user_by_wallet(wallet_address: str):
 async def save_user_data(user_id: int, username: str, wallet_address: str, has_nft: bool, verification_memo: str = None):
     conn = sqlite3.connect('members.db')
     cursor = conn.cursor()
-    
-    # First get the current language setting
-    cursor.execute('SELECT language FROM members WHERE user_id = ?', (user_id,))
-    result = cursor.fetchone()
-    language = result[0] if result else 'en'
-    
     cursor.execute('''
         INSERT OR REPLACE INTO members 
-        (user_id, username, wallet_address, last_checked, has_nft, verification_memo, language)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
-    ''', (user_id, username, wallet_address, has_nft, verification_memo, language))
-    conn.commit()
-    conn.close()
-
-async def save_user_language(user_id: int, language: str):
-    conn = sqlite3.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        UPDATE members 
-        SET language = ?
-        WHERE user_id = ?
-    ''', (language, user_id))
+        (user_id, username, wallet_address, last_checked, has_nft, verification_memo)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+    ''', (user_id, username, wallet_address, has_nft, verification_memo))
     conn.commit()
     conn.close()
 
@@ -447,73 +241,90 @@ async def check_nft_royalties(wallet_address: str) -> Tuple[int, int, int, List[
     
     return paid_royalties, unpaid_royalties, no_transfer_info, nft_details
 
+# Wallet submission handler
+@dp.message(UserState.waiting_for_wallet)
+async def handle_wallet_input(message: types.Message, state: FSMContext):
+    wallet_address = message.text.strip()
+    user_id = message.from_user.id
+    username = message.from_user.username
+    
+    # Basic wallet address validation
+    if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
+        await message.answer("❌ Invalid wallet address format. Please send a valid TON wallet address.")
+        return
+    
+    # Generate verification memo
+    verification_memo = f"verify_{user_id}_{int(time_module.time())}"
+    await save_user_data(user_id, username, wallet_address, False, verification_memo)
+    
+    verification_message = (
+        "To verify your wallet ownership, please:\n\n"
+        "1. Send a small transaction (0.01 TON) to this address:\n"
+        f"`{VERIFICATION_WALLET}`\n\n"
+        "2. Include this exact memo in your transaction message:\n"
+        f"`{verification_memo}`\n\n"
+        "3. Use /verify command after sending the transaction.\n\n"
+        "I'll check for your transaction and verify your NFT ownership."
+    )
+    await message.answer(verification_message, parse_mode="Markdown")
+    await state.set_state(UserState.waiting_for_transaction)
+    
+    # Notify admin about new verification attempt
+    admin_message = (
+        "🆕 New User Verification Started:\n"
+        f"Username: @{username}\n"
+        f"User ID: {user_id}\n"
+        f"Wallet: {wallet_address}\n"
+        f"Verification Memo: {verification_memo}"
+    )
+    await notify_admin(admin_message)
+
 # Updated start command handler
 @dp.message(Command('start'))
 async def start_command(message: types.Message, state: FSMContext):
-    # Create language selection keyboard
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text="🇬🇧 English"),
-                KeyboardButton(text="🇷🇺 Русский")
-            ]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-    
-    # Force language selection first
-    await message.answer(
-        "🌐 Please select your language:\n🌐 Пожалуйста, выберите язык:", 
-        reply_markup=keyboard
-    )
-    await state.set_state(UserState.selecting_language)
-
-# Add language selection handler
-@dp.message(UserState.selecting_language)
-async def handle_language_selection(message: types.Message, state: FSMContext):
-    # Explicitly set language based on selection
-    language = 'ru' if '🇷🇺' in message.text else 'en'
     user_id = message.from_user.id
+    username = message.from_user.username or "Anonymous"
     
-    # Save language preference
-    await save_user_language(user_id, language)
-    
-    # Verify the language was saved
-    user_data = await get_user_data(user_id)
-    translations = TRANSLATIONS[language]
-    
-    # Log for debugging
-    print(f"Selected language: {language}")
-    print(f"User data after save: {user_data}")
-    
-    username = message.from_user.username
+    # Check if user exists in database
     existing_user = await get_user_data(user_id)
+    user_status = "Returning" if existing_user else "New"
     
-    await message.answer(
-        translations['welcome_message'].format(
-            'back ' if existing_user else '',
-            username
-        ),
-        reply_markup=ReplyKeyboardRemove()
+    # Notify admin about user interaction
+    admin_message = (
+        f"🔔 *{user_status} User Started Bot:*\n"
+        f"Username: @{username}\n"
+        f"User ID: `{user_id}`\n"
+        f"Previous Wallet: `{existing_user[2] if existing_user else 'None'}`\n"
+        f"Previous NFT Status: {'Yes' if existing_user and existing_user[4] else 'No' if existing_user else 'N/A'}"
     )
+    await notify_admin(admin_message)
+    
+    # Send welcome message with image
+    try:
+        welcome_image = FSInputFile(WELCOME_IMAGE_PATH)
+        welcome_message = (
+            f"👋 This is Boris. \n Welcome {'back ' if existing_user else ''}@{username}!\n\n"
+            "I'm tonfans NFT checker bot. I'll help you verify your NFT "
+            "ownership and get access to our exclusive group.\n\n"
+            "Please send me your TON wallet address to begin verification."
+        )
+        await message.answer_photo(photo=welcome_image, caption=welcome_message)
+    except Exception as e:
+        logger.error(f"Failed to send welcome image: {e}")
+        await message.answer(welcome_message)
     
     await state.set_state(UserState.waiting_for_wallet)
 
 # Updated wallet submission handler
 @dp.message(UserState.waiting_for_wallet)
 async def handle_wallet_input(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    user_data = await get_user_data(user_id)
-    language = user_data[6] if user_data else 'en'
-    translations = TRANSLATIONS[language]
-    
     wallet_address = message.text.strip()
-    username = message.from_user.username
+    user_id = message.from_user.id
+    username = message.from_user.username or "Anonymous"
     
     # Basic wallet address validation
     if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
-        await message.answer(translations['invalid_wallet'])
+        await message.answer("❌ Invalid wallet address format. Please send a valid TON wallet address.")
         await notify_admin(f"❌ *Invalid Wallet Attempt:*\n"
                          f"User: @{username}\n"
                          f"ID: `{user_id}`\n"
@@ -523,7 +334,7 @@ async def handle_wallet_input(message: types.Message, state: FSMContext):
     # Check if wallet is already registered
     existing_wallet_user = await get_user_by_wallet(wallet_address)
     if existing_wallet_user and existing_wallet_user[0] != user_id:
-        await message.answer(translations['wallet_already_registered'])
+        await message.answer("❌ This wallet is already registered to another user.")
         await notify_admin(f"⚠️ *Duplicate Wallet Attempt:*\n"
                          f"User: @{username}\n"
                          f"ID: `{user_id}`\n"
@@ -535,97 +346,132 @@ async def handle_wallet_input(message: types.Message, state: FSMContext):
     verification_memo = f"verify_{user_id}_{int(time_module.time())}"
     await save_user_data(user_id, username, wallet_address, False, verification_memo)
     
-    verification_message = translations['verification_instructions'].format(
-        VERIFICATION_WALLET,
-        verification_memo
+    verification_message = (
+        "To verify your wallet ownership, please:\n\n"
+        "1. Send a small transaction (0.01 TON) to my address:\n"
+        f"`{VERIFICATION_WALLET}`\n\n"
+        "2. Include this exact memo in your transaction message:\n"
+        f"`{verification_memo}`\n\n"
+        "3. Use /verify command after sending the transaction.\n\n"
+        "I'll check for your transaction and verify your NFT ownership."
     )
     await message.answer(verification_message, parse_mode="Markdown")
     await state.set_state(UserState.waiting_for_transaction)
     
     # Notify admin about verification attempt
-    admin_message = translations['admin_new_verification'].format(
-        username,
-        user_id,
-        wallet_address,
-        verification_memo
+    admin_message = (
+        "🆕 *New Verification Attempt:*\n"
+        f"Username: @{username}\n"
+        f"User ID: `{user_id}`\n"
+        f"Wallet: `{wallet_address}`\n"
+        f"Verification Memo: `{verification_memo}`"
     )
     await notify_admin(admin_message)
 
 @dp.message(Command('verify'))
 async def verify_command(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
+    username = message.from_user.username or "Anonymous"
     user_data = await get_user_data(user_id)
     
-    if not user_data:
-        await message.answer(TRANSLATIONS['en']['start_verification'])
-        return
-        
-    language = user_data[6] if user_data else 'en'
-    translations = TRANSLATIONS[language]
+    await notify_admin(f"🔍 *Verification Attempt:*\n"
+                      f"User: @{username}\n"
+                      f"ID: `{user_id}`")
     
-    username = message.from_user.username
+    if not user_data:
+        await message.answer("❌ Please start the verification process first using /start command.")
+        return
+    
     verification_memo = user_data[5]
     wallet_address = user_data[2]
     
     if not verification_memo or not wallet_address:
-        await message.answer(translations['no_pending_verification'])
+        await message.answer("❌ No pending verification found. Please start over using /start command.")
         return
     
-    await message.answer(translations['checking_transaction'])
+    await message.answer("🔍 Checking your verification transaction...")
     
     transaction_verified = await check_transaction(VERIFICATION_WALLET, verification_memo)
     
     if not transaction_verified:
-        await message.answer(
-            translations['transaction_not_found'].format(
-                VERIFICATION_WALLET,
-                verification_memo
-            ),
-            parse_mode="Markdown"
+        verification_instructions = (
+            "❌ Transaction not found. Please make sure you:\n\n"
+            f"1. Sent 0.01 TON to: `{VERIFICATION_WALLET}`\n"
+            f"2. Included this memo: `{verification_memo}`\n\n"
+            "Try again with /verify after sending the transaction."
         )
+        await message.answer(verification_instructions, parse_mode="Markdown")
         return
-
-    # Check NFT ownership
+    
+    await message.answer("✅ Transaction verified! Now checking NFT ownership...")
+    await notify_admin(f"✅ *Transaction Verified:*\n"
+                      f"User: @{username}\n"
+                      f"ID: `{user_id}`\n"
+                      f"Wallet: `{wallet_address}`\n"
+                      f"Checking NFT ownership...")
+    
     has_nft = await check_nft_ownership(wallet_address)
+    await save_user_data(user_id, user_data[1], wallet_address, has_nft)
     
     if has_nft:
-        # Check token balance
-        token_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
-        shiva_balance = token_balance / 1_000_000_000
-        
         # Check NFT royalties
+        await message.answer("🔍 Checking NFT royalty status...")
         paid, unpaid, no_info, nft_details = await check_nft_royalties(wallet_address)
         
-        # Send verification status
-        admin_message = translations['admin_verification_success'].format(
-            username,
-            user_id,
-            wallet_address,
-            shiva_balance,
-            paid,
-            unpaid,
-            no_info
+        # Prepare royalty status message
+        royalty_status = (
+            "📊 NFT Royalty Status:\n"
+            f"✅ NFTs with paid royalties: {paid}\n"
+            f"❌ NFTs without royalties: {unpaid}\n"
+            f"ℹ️ NFTs with no transfer info: {no_info}\n\n"
+            "Detailed NFT Status:\n"
         )
-        await message.answer(admin_message)
         
-        # Send success message
-        success_message = translations['success_message']
+        for nft in nft_details:
+            if nft["transfer_info"]:
+                status = "✅ Royalty paid" if nft["royalty_paid"] else "❌ Royalty not paid"
+            else:
+                status = "ℹ️ No transfer information"
+            royalty_status += f"NFT #{nft['index']}: {status}\n"
+        
+        await message.answer(royalty_status)
+        
+        # Create keyboard with both group and marketplace links
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Join Group", url=GROUP_INVITE_LINK)],
+            [InlineKeyboardButton(text="NFT Marketplace", url=NFT_MARKETPLACE_LINK)]
+        ])
+        
+        join_message = "🎉 Congratulations! Your wallet is verified and your tonfans NFT ownership confirmed."
         if unpaid > 0:
-            success_message += translations['royalty_warning']
-        success_message += translations['join_group']
+            join_message += "\n⚠️ Some of your NFTs have unpaid royalties. Please consider paying them to support the project."
+        join_message += "\nYou can now join our exclusive group:"
         
-        # Create keyboard with group link
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=translations['join_group_button'], url=GROUP_INVITE_LINK)]
-        ])
+        await message.answer(join_message, reply_markup=keyboard)
         
-        await message.answer(success_message, reply_markup=keyboard)
+        await notify_admin(
+            f"✅ *NFT Verification Successful:*\n"
+            f"User: @{username}\n"
+            f"ID: `{user_id}`\n"
+            f"Wallet: `{wallet_address}`\n"
+            f"Royalty Status: {paid} paid, {unpaid} unpaid, {no_info} unknown"
+        )
     else:
-        # Send no NFT found message
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=translations['buy_nft_button'], url=NFT_MARKETPLACE_LINK)]
+            [InlineKeyboardButton(text="Buy NFT", url=NFT_MARKETPLACE_LINK)]
         ])
-        await message.answer(translations['no_nft_found'], reply_markup=keyboard)
+        await message.answer(
+            "✅ Wallet verified but no NFT found in your wallet.\n"
+            "To join our group, you need to own at least one NFT from our collection.\n"
+            "You can get one here:",
+            reply_markup=keyboard
+        )
+        await notify_admin(f"❌ *No NFT Found:*\n"
+                         f"User: @{username}\n"
+                         f"ID: `{user_id}`\n"
+                         f"Wallet: `{wallet_address}`")
+    
+    await state.clear()
 
 # Add a new command to check royalties separately
 @dp.message(Command('royalties'))
@@ -638,7 +484,7 @@ async def check_royalties_command(message: types.Message):
         return
     
     wallet_address = user_data[2]
-    await message.answer("���� Checking NFT royalty status...")
+    await message.answer("🔍 Checking NFT royalty status...")
     
     paid, unpaid, no_info, nft_details = await check_nft_royalties(wallet_address)
     
@@ -652,9 +498,9 @@ async def check_royalties_command(message: types.Message):
     
     for nft in nft_details:
         if nft["transfer_info"]:
-            status = translations['nft_status_paid'] if nft["royalty_paid"] else translations['nft_status_unpaid']
+            status = "✅ Royalty paid" if nft["royalty_paid"] else "❌ Royalty not paid"
         else:
-            status = translations['nft_status_unknown']
+            status = "ℹ️ No transfer information"
         royalty_status += f"NFT #{nft['index']}: {status}\n"
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -703,7 +549,7 @@ async def search_user(message: types.Message):
             
             if current_nft_status != has_nft:
                 await save_user_data(user_id, username, wallet_address, current_nft_status)
-                report += "\n\n⚠⚠️ Database has been updated with new NFT status"
+                report += "\n\n⚠️ Database has been updated with new NFT status"
             
             await message.answer(report)
 
@@ -772,7 +618,7 @@ async def list_nft_holders(message: types.Message):
             report += f"  Wallet: {user['wallet']}\n"
             report += f"  User ID: {user['user_id']}\n\n"
     else:
-        report = "���� No NFT holders found in database!"
+        report = "❌ No NFT holders found in database!"
     
     await message.answer(report)
 
@@ -1003,37 +849,6 @@ async def send_group_message(message: Message):
     except Exception as e:
         await message.reply(f"Error sending message: {str(e)}")
 
-# Add the token balance check function
-async def check_token_balance(user_address: str, jetton_master_address: str) -> int:
-    API_BASE_URL = "https://tonapi.io/v2"
-    
-    async with aiohttp.ClientSession() as session:
-        try:
-            url = f"{API_BASE_URL}/accounts/{user_address}/jettons/{jetton_master_address}"
-            params = {
-                "currencies": "shiva"
-            }
-            headers = {
-                "accept": "application/json",
-                "Authorization": f"Bearer {TONAPI_KEY}"
-            }
-            
-            async with session.get(url, params=params, headers=headers) as response:
-                if response.status != 200:
-                    logger.error(f"API request failed with status {response.status}")
-                    return 0
-                
-                data = await response.json()
-                balance = int(data.get("balance", "0"))
-                logger.info(f"$SHIVA balance for user address {user_address}: {balance}")
-                return balance
-                
-        except Exception as e:
-            logger.error(f"Error checking token balance: {str(e)}")
-            logger.error(f"Error type: {type(e)}")
-            logger.error("Error traceback: ", exc_info=True)
-            return 0
-
 # Main function
 async def main():
     print("Starting NFT Checker Bot...")
@@ -1048,29 +863,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-
-async def get_user_language(user_id: int) -> str:
-    user_data = await get_user_data(user_id)
-    return user_data[6] if user_data and len(user_data) > 6 else 'en'
-
-# Add middleware to check for language selection
-class LanguageMiddleware:
-    async def __call__(self, handler, event, data):
-        if isinstance(event, Message):
-            user_id = event.from_user.id
-            user_data = await get_user_data(user_id)
-            
-            # Allow only /start command and language selection if no language is set
-            if (not user_data or 'language' not in user_data) and \
-               event.text not in ['/start', '🇬🇧 English', '🇷🇺 Русский']:
-                await event.answer(
-                    "🌐 Please start the bot and select your language first:\n"
-                    "🌐 Пожалуйста, запустите бота и выберите язык сначала:\n"
-                    "/start"
-                )
-                return
-        
-        return await handler(event, data)
-
-# Add the middleware to the dispatcher
-dp.message.middleware(LanguageMiddleware())
