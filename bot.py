@@ -140,7 +140,7 @@ TRANSLATIONS = {
             "После установки имени пользователя вернитесь и снова используйте команду /start."
         ),
         'welcome_message': (
-            "👋 Это Борис.\nДобро ��ожаловать {}@{}!\n\n"
+            "👋 Это Борис.\nДобро пожаловать {}@{}!\n\n"
             "Я бот-проверщик NFT tonfans. Я помогу вам проверить владение NFT "
             "и получить доступ к нашей эксклюзивной группе.\n\n"
             "Пожалуйста, отправьте мне адрес вашего TON кошелька для начала проверки."
@@ -155,7 +155,7 @@ TRANSLATIONS = {
             "3. Используйте команду /verify после отправки транзакции.\n\n"
             "Я проверю вашу транзакцию и владение NFT."
         ),
-        'checking_transaction': "🔍 Проверяю вашу транзакц��ю...",
+        'checking_transaction': "🔍 Проверяю вашу транзакцию...",
         'transaction_not_found': (
             "❌ Транзакция не найдена. Пожалуйста, убедитесь, что вы:\n\n"
             "1. Отправили 0.01 TON на:\n"
@@ -165,7 +165,7 @@ TRANSLATIONS = {
             "Попробуйте снова с командой /verify после отправки транзакции."
         ),
         'transaction_verified': "✅ Транзакция подтверждена! Теперь проверяю владение NFT...",
-        'checking_royalties': "🔍 Проверяю стат���с роялти NFT...",
+        'checking_royalties': "🔍 Проверяю стат��с роялти NFT...",
         'royalty_status': (
             "📊 Статус роялти NFT:\n"
             "✅ NFT с оплаченными роялти: {}\n"
@@ -177,7 +177,7 @@ TRANSLATIONS = {
         'nft_status_unpaid': "❌ Роялти не оплачено",
         'nft_status_unknown': "ℹ️ Нет информации о переводе",
         'success_message': "🎉 Поздравляем! Ваш кошелек подтвержден и владение NFT tonfans подтверждено.",
-        'royalty_warning': "\n⚠️ Некоторые из ваших NFT имеют неоплаченные роялти. Пожалуйста, рассмотрит�� возможность их оплаты для поддержки проекта.",
+        'royalty_warning': "\n⚠️ Некоторые из ваших NFT имеют неоплаченные роялти. Пожалуйста, рассмотрит возможность их оплаты для поддержки проекта.",
         'join_group': "\nТеперь вы можете присоединиться к нашей эксклюзивной группе:",
         'no_nft_found': (
             "✅ Кошелек подтвержден, но NFT не найден в вашем кошельке.\n"
@@ -221,14 +221,7 @@ def setup_database():
     conn = sqlite3.connect('members.db')
     cursor = conn.cursor()
     
-    # First, check if the language column exists
-    cursor.execute("PRAGMA table_info(members)")
-    columns = [column[1] for column in cursor.fetchall()]
-    
-    if 'language' not in columns:
-        # Add language column if it doesn't exist
-        cursor.execute('ALTER TABLE members ADD COLUMN language TEXT DEFAULT "en"')
-    
+    # First create the table if it doesn't exist
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS members (
             user_id INTEGER PRIMARY KEY,
@@ -240,6 +233,14 @@ def setup_database():
             language TEXT DEFAULT 'en'
         )
     ''')
+    
+    # Then check if the language column exists
+    try:
+        cursor.execute("SELECT language FROM members LIMIT 1")
+    except sqlite3.OperationalError:
+        # Add language column if it doesn't exist
+        cursor.execute('ALTER TABLE members ADD COLUMN language TEXT DEFAULT "en"')
+    
     conn.commit()
     conn.close()
 
@@ -376,6 +377,36 @@ async def check_transaction(address: str, memo: str) -> bool:
             logger.error(f"Error checking transaction: {str(e)}")
             return False
 
+async def check_token_balance(user_address: str, jetton_master_address: str) -> int:
+    API_BASE_URL = "https://tonapi.io/v2"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            url = f"{API_BASE_URL}/accounts/{user_address}/jettons/{jetton_master_address}"
+            params = {
+                "currencies": "shiva"
+            }
+            headers = {
+                "accept": "application/json",
+                "Authorization": f"Bearer {TONAPI_KEY}"
+            }
+            
+            async with session.get(url, params=params, headers=headers) as response:
+                if response.status != 200:
+                    logger.error(f"API request failed with status {response.status}")
+                    return 0
+                
+                data = await response.json()
+                balance = int(data.get("balance", "0"))
+                logger.info(f"$SHIVA balance for user address {user_address}: {balance}")
+                return balance
+                
+        except Exception as e:
+            logger.error(f"Error checking token balance: {str(e)}")
+            logger.error(f"Error type: {type(e)}")
+            logger.error("Error traceback: ", exc_info=True)
+            return 0
+
 async def check_nft_royalties(wallet_address: str) -> Tuple[int, int, int, List[Dict]]:
     """
     Check royalty payment status for NFTs in a wallet.
@@ -446,6 +477,32 @@ async def check_nft_royalties(wallet_address: str) -> Tuple[int, int, int, List[
         nft_details.append(nft_status)
     
     return paid_royalties, unpaid_royalties, no_transfer_info, nft_details
+
+# Add middleware to check for language selection
+class LanguageMiddleware:
+    async def __call__(self, handler, event, data):
+        if isinstance(event, Message):
+            user_id = event.from_user.id
+            user_data = await get_user_data(user_id)
+            
+            # Allow only /start command and language selection if no language is set
+            if (not user_data or 'language' not in user_data) and \
+               event.text not in ['/start', '🇬🇧 English', '🇷🇺 Русский']:
+                await event.answer(
+                    "🌐 Please start the bot and select your language first:\n"
+                    "🌐 Пожалуйста, запустите бота и выберите язык сначала:\n"
+                    "/start"
+                )
+                return
+        
+        return await handler(event, data)
+
+# Add the middleware to the dispatcher
+dp.message.middleware(LanguageMiddleware())
+
+async def get_user_language(user_id: int) -> str:
+    user_data = await get_user_data(user_id)
+    return user_data[6] if user_data and len(user_data) > 6 else 'en'
 
 # Updated start command handler
 @dp.message(Command('start'))
@@ -1003,37 +1060,6 @@ async def send_group_message(message: Message):
     except Exception as e:
         await message.reply(f"Error sending message: {str(e)}")
 
-# Add the token balance check function
-async def check_token_balance(user_address: str, jetton_master_address: str) -> int:
-    API_BASE_URL = "https://tonapi.io/v2"
-    
-    async with aiohttp.ClientSession() as session:
-        try:
-            url = f"{API_BASE_URL}/accounts/{user_address}/jettons/{jetton_master_address}"
-            params = {
-                "currencies": "shiva"
-            }
-            headers = {
-                "accept": "application/json",
-                "Authorization": f"Bearer {TONAPI_KEY}"
-            }
-            
-            async with session.get(url, params=params, headers=headers) as response:
-                if response.status != 200:
-                    logger.error(f"API request failed with status {response.status}")
-                    return 0
-                
-                data = await response.json()
-                balance = int(data.get("balance", "0"))
-                logger.info(f"$SHIVA balance for user address {user_address}: {balance}")
-                return balance
-                
-        except Exception as e:
-            logger.error(f"Error checking token balance: {str(e)}")
-            logger.error(f"Error type: {type(e)}")
-            logger.error("Error traceback: ", exc_info=True)
-            return 0
-
 # Main function
 async def main():
     print("Starting NFT Checker Bot...")
@@ -1048,29 +1074,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-
-async def get_user_language(user_id: int) -> str:
-    user_data = await get_user_data(user_id)
-    return user_data[6] if user_data and len(user_data) > 6 else 'en'
-
-# Add middleware to check for language selection
-class LanguageMiddleware:
-    async def __call__(self, handler, event, data):
-        if isinstance(event, Message):
-            user_id = event.from_user.id
-            user_data = await get_user_data(user_id)
-            
-            # Allow only /start command and language selection if no language is set
-            if (not user_data or 'language' not in user_data) and \
-               event.text not in ['/start', '🇬🇧 English', '🇷🇺 Русский']:
-                await event.answer(
-                    "🌐 Please start the bot and select your language first:\n"
-                    "🌐 Пожалуйста, запустите бота и выберите язык сначала:\n"
-                    "/start"
-                )
-                return
-        
-        return await handler(event, data)
-
-# Add the middleware to the dispatcher
-dp.message.middleware(LanguageMiddleware())
