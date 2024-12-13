@@ -16,6 +16,13 @@ from aiogram.types import Message
 import sqlite3
 import logging
 
+# At the top of the file
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Basic Configuration
 API_TOKEN = '8067666224:AAELEOrjl0lHDUsqP7NUFU8FTYuzRt972ik'
 NFT_COLLECTION_ADDRESS = 'EQDmUOKwwa6KU0YFbA_CZTGccRdh5SWIQdBDKg741ecOqzR0'
@@ -193,7 +200,7 @@ TRANSLATIONS = {
         'no_pending_verification': "Не найдено неотправленных запросов на верификацию. Пожалуйста, начните снова, используя команду /start.",
         'admin_new_verification': (
             "�� *Новый запрос на верификацию:*\n"
-            "Пользователь: @{}\n"
+            "Пользовате��ь: @{}\n"
             "ID: `{}`\n"
             "Кошелек: `{}`\n"
             "Memo: `{}`"
@@ -221,7 +228,7 @@ def setup_database():
     conn = sqlite3.connect('members.db')
     cursor = conn.cursor()
     
-    # First create the table if it doesn't exist
+    # Create table with language column having a NOT NULL constraint
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS members (
             user_id INTEGER PRIMARY KEY,
@@ -230,16 +237,9 @@ def setup_database():
             last_checked TIMESTAMP,
             has_nft BOOLEAN,
             verification_memo TEXT,
-            language TEXT DEFAULT 'en'
+            language TEXT NOT NULL DEFAULT 'en'
         )
     ''')
-    
-    # Then check if the language column exists
-    try:
-        cursor.execute("SELECT language FROM members LIMIT 1")
-    except sqlite3.OperationalError:
-        # Add language column if it doesn't exist
-        cursor.execute('ALTER TABLE members ADD COLUMN language TEXT DEFAULT "en"')
     
     conn.commit()
     conn.close()
@@ -281,6 +281,7 @@ async def save_user_data(user_id: int, username: str, wallet_address: str, has_n
     conn.close()
 
 async def save_user_language(user_id: int, language: str):
+    logger.info(f"Saving language {language} for user {user_id}")
     conn = sqlite3.connect('members.db')
     cursor = conn.cursor()
     cursor.execute('''
@@ -290,6 +291,7 @@ async def save_user_language(user_id: int, language: str):
     ''', (language, user_id))
     conn.commit()
     conn.close()
+    logger.info(f"Language saved successfully for user {user_id}")
 
 async def bulk_add_members(members_data: list):
     """
@@ -483,18 +485,32 @@ class LanguageMiddleware:
     async def __call__(self, handler, event, data):
         if isinstance(event, Message):
             user_id = event.from_user.id
-            user_data = await get_user_data(user_id)
             
-            # Allow only /start command and language selection if no language is set
-            if (not user_data or 'language' not in user_data) and \
-               event.text not in ['/start', '🇬🇧 English', '🇷🇺 Русский']:
+            # Skip middleware for these commands/messages
+            allowed_messages = ['/start', '🇬🇧 English', '🇷🇺 Русский']
+            if event.text in allowed_messages:
+                return await handler(event, data)
+            
+            # Get current state
+            state = data.get('state')
+            if state and await state.get_state() == UserState.selecting_language:
+                return await handler(event, data)
+            
+            # Check database for language
+            conn = sqlite3.connect('members.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT language FROM members WHERE user_id = ?', (user_id,))
+            result = cursor.fetchone()
+            conn.close()
+            
+            if not result:
                 await event.answer(
                     "🌐 Please start the bot and select your language first:\n"
                     "🌐 Пожалуйста, запустите бота и выберите язык сначала:\n"
                     "/start"
                 )
                 return
-        
+            
         return await handler(event, data)
 
 # Add the middleware to the dispatcher
@@ -532,81 +548,72 @@ async def handle_language_selection(message: types.Message, state: FSMContext):
     # Explicitly set language based on selection
     language = 'ru' if '🇷🇺' in message.text else 'en'
     user_id = message.from_user.id
+    username = message.from_user.username
     
-    # Save language preference
-    await save_user_language(user_id, language)
+    # Save initial user data with language
+    conn = sqlite3.connect('members.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT OR REPLACE INTO members 
+        (user_id, username, language)
+        VALUES (?, ?, ?)
+    ''', (user_id, username, language))
+    conn.commit()
+    conn.close()
     
-    # Verify the language was saved
-    user_data = await get_user_data(user_id)
     translations = TRANSLATIONS[language]
     
-    # Log for debugging
-    print(f"Selected language: {language}")
-    print(f"User data after save: {user_data}")
-    
-    username = message.from_user.username
-    existing_user = await get_user_data(user_id)
-    
+    # Remove keyboard and send welcome message
     await message.answer(
         translations['welcome_message'].format(
-            'back ' if existing_user else '',
+            'back ' if await get_user_data(user_id) else '',
             username
         ),
         reply_markup=ReplyKeyboardRemove()
     )
     
+    # Store language in state for backup
+    await state.update_data(language=language)
     await state.set_state(UserState.waiting_for_wallet)
 
 # Updated wallet submission handler
 @dp.message(UserState.waiting_for_wallet)
 async def handle_wallet_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    user_data = await get_user_data(user_id)
-    language = user_data[6] if user_data else 'en'
+    
+    # Get user's language
+    conn = sqlite3.connect('members.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT language FROM members WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    language = result[0] if result else 'en'
     translations = TRANSLATIONS[language]
     
     wallet_address = message.text.strip()
-    username = message.from_user.username
     
     # Basic wallet address validation
     if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
         await message.answer(translations['invalid_wallet'])
-        await notify_admin(f"❌ *Invalid Wallet Attempt:*\n"
-                         f"User: @{username}\n"
-                         f"ID: `{user_id}`\n"
-                         f"Invalid Input: `{wallet_address}`")
-        return
-    
-    # Check if wallet is already registered
-    existing_wallet_user = await get_user_by_wallet(wallet_address)
-    if existing_wallet_user and existing_wallet_user[0] != user_id:
-        await message.answer(translations['wallet_already_registered'])
-        await notify_admin(f"⚠️ *Duplicate Wallet Attempt:*\n"
-                         f"User: @{username}\n"
-                         f"ID: `{user_id}`\n"
-                         f"Wallet: `{wallet_address}`\n"
-                         f"Already registered to ID: `{existing_wallet_user[0]}`")
         return
     
     # Generate verification memo
     verification_memo = f"verify_{user_id}_{int(time_module.time())}"
-    await save_user_data(user_id, username, wallet_address, False, verification_memo)
     
-    verification_message = translations['verification_instructions'].format(
-        VERIFICATION_WALLET,
-        verification_memo
+    # Save wallet address
+    await save_user_data(user_id, message.from_user.username, wallet_address, False, verification_memo)
+    
+    # Send verification instructions
+    await message.answer(
+        translations['verification_instructions'].format(
+            VERIFICATION_WALLET,
+            verification_memo
+        ),
+        parse_mode="Markdown"
     )
-    await message.answer(verification_message, parse_mode="Markdown")
+    
     await state.set_state(UserState.waiting_for_transaction)
-    
-    # Notify admin about verification attempt
-    admin_message = translations['admin_new_verification'].format(
-        username,
-        user_id,
-        wallet_address,
-        verification_memo
-    )
-    await notify_admin(admin_message)
 
 @dp.message(Command('verify'))
 async def verify_command(message: types.Message, state: FSMContext):
