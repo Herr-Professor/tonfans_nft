@@ -1,13 +1,12 @@
 import asyncio
 import aiohttp
 import base64
-import json
 import requests
 from typing import Tuple, List, Dict
 import time as time_module
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ChatMemberOwner, ChatMemberAdministrator, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -48,7 +47,6 @@ class UserState(StatesGroup):
     waiting_for_wallet = State()
     waiting_for_transaction = State()
 
-# Add translations dictionary
 TRANSLATIONS = {
     'en': {
         'select_language': "🌐 Please select your language:",
@@ -221,8 +219,6 @@ TRANSLATIONS = {
         )
     }
 }
-
-# Database setup
 
 def setup_database():
     conn = sqlite3.connect('members.db')
@@ -690,42 +686,6 @@ async def verify_command(message: types.Message, state: FSMContext):
             [InlineKeyboardButton(text=translations['buy_nft_button'], url=NFT_MARKETPLACE_LINK)]
         ])
         await message.answer(translations['no_nft_found'], reply_markup=keyboard)
-
-# Add a new command to check royalties separately
-@dp.message(Command('royalties'))
-async def check_royalties_command(message: types.Message):
-    user_id = message.from_user.id
-    user_data = await get_user_data(user_id)
-    
-    if not user_data or not user_data[2]:  # Check if user has registered wallet
-        await message.answer("❌ Please register your wallet first using /start command.")
-        return
-    
-    wallet_address = user_data[2]
-    await message.answer("���� Checking NFT royalty status...")
-    
-    paid, unpaid, no_info, nft_details = await check_nft_royalties(wallet_address)
-    
-    royalty_status = (
-        "📊 NFT Royalty Status:\n"
-        f"✅ NFTs with paid royalties: {paid}\n"
-        f"❌ NFTs without royalties: {unpaid}\n"
-        f"ℹ️ NFTs with no transfer info: {no_info}\n\n"
-        "Detailed NFT Status:\n"
-    )
-    
-    for nft in nft_details:
-        if nft["transfer_info"]:
-            status = translations['nft_status_paid'] if nft["royalty_paid"] else translations['nft_status_unpaid']
-        else:
-            status = translations['nft_status_unknown']
-        royalty_status += f"NFT #{nft['index']}: {status}\n"
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="NFT Marketplace", url=NFT_MARKETPLACE_LINK)]
-    ])
-    
-    await message.answer(royalty_status, reply_markup=keyboard)
     
 @dp.message(Command('search'))
 async def search_user(message: types.Message):
@@ -947,66 +907,6 @@ async def add_members_command(message: types.Message):
                     await bot.send_message(admin_id, admin_message)
                 except Exception as e:
                     logger.error(f"Failed to notify admin {admin_id}: {e}")
-
-@dp.message(Command("group_info"))
-async def get_group_info(message: Message):
-    try:
-        # Get chat information
-        chat = await bot.get_chat(GROUP_ID)
-        members_count = await bot.get_chat_member_count(GROUP_ID)
-        
-        info_text = (
-            f"📊 Group Information:\n"
-            f"Name: {chat.title}\n"
-            f"ID: {chat.id}\n"
-            f"Type: {chat.type}\n"
-            f"Members: {members_count}\n"
-        )
-        
-        if chat.description:
-            info_text += f"Description: {chat.description}\n"
-            
-        await message.reply(info_text)
-    except Exception as e:
-        await message.reply(f"Error getting group info: {str(e)}")
-
-@dp.message(Command("members"))
-async def get_members(message: Message):
-    try:
-        # Get chat information first
-        chat_info = await bot.get_chat(GROUP_ID)
-        
-        # Get administrators (owner and admins)
-        admins = await bot.get_chat_administrators(GROUP_ID)
-        
-        # Format member information
-        members_info = ["👥 Group Members:\n"]
-        
-        # Add administrators first
-        members_info.append("👑 Administrators:")
-        for admin in admins:
-            user = admin.user
-            member_info = f"• {user.full_name} (ID: {user.id})"
-            if user.username:
-                member_info += f" @{user.username}"
-            if isinstance(admin, ChatMemberOwner):
-                member_info += " (Owner)"
-            elif isinstance(admin, ChatMemberAdministrator):
-                member_info += " (Admin)"
-            members_info.append(member_info)
-        
-        # Get total member count
-        member_count = await bot.get_chat_member_count(GROUP_ID)
-        members_info.append(f"\n📊 Total members: {member_count}")
-        
-        # Note about regular members
-        members_info.append("\nNote: Due to Telegram API limitations, only administrators can be listed individually.")
-        
-        # Send the formatted message
-        await message.reply("\n".join(members_info))
-        
-    except Exception as e:
-        await message.reply(f"Error getting members: {str(e)}")
 
 @dp.message(Command("kick"))
 async def kick_member(message: Message):
