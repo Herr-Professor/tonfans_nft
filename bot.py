@@ -423,76 +423,76 @@ async def check_token_balance(user_address: str, jetton_master_address: str) -> 
             logger.error("Error traceback: ", exc_info=True)
             return 0
 
-async def check_nft_royalties(wallet_address: str) -> Tuple[int, int, int, List[Dict]]:
+async def check_nft_royalties(wallet_address: str):
     """
     Check royalty payment status for NFTs in a wallet.
     Returns: (paid_royalties, unpaid_royalties, no_transfer_info, nft_details)
     """
-    nft_response = requests.get(
-        f"{BASE_URL}/nft/items",
-        params={
-            "owner_address": wallet_address,
-            "collection_address": NFT_COLLECTION_ADDRESS,
-            "limit": 25,
-            "offset": 0
-        },
-        headers={"accept": "application/json"}
-    )
-    
-    nft_data = nft_response.json()
-    nft_items = nft_data.get("nft_items", [])
-    
+    nft_details = []
     paid_royalties = 0
     unpaid_royalties = 0
     no_transfer_info = 0
-    nft_details = []
-    
-    for nft in nft_items:
-        nft_address = nft["address"]
-        nft_index = nft.get("index", "Unknown")
-        
-        transfer_response = requests.get(
-            f"{BASE_URL}/nft/transfers",
-            params={
-                "owner_address": wallet_address,
-                "item_address": nft_address,
-                "collection_address": NFT_COLLECTION_ADDRESS,
-                "direction": "in",
-                "limit": 25,
-                "offset": 0,
-                "sort": "desc"
-            },
-            headers={"accept": "application/json"}
-        )
-        
-        transfer_data = transfer_response.json()
-        transfers = transfer_data.get("nft_transfers", [])
-        
-        if transfers:
-            latest_transfer = transfers[0]
-            forward_amount = latest_transfer.get("forward_amount")
-            
-            nft_status = {
-                "index": nft_index,
-                "royalty_paid": forward_amount != "1",
-                "transfer_info": True
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = f"https://tonapi.io/v2/accounts/{wallet_address}/nfts"
+            headers = {
+                "Authorization": f"Bearer {TONAPI_KEY}"
             }
-            
-            if forward_amount == "1":
-                unpaid_royalties += 1
-            else:
-                paid_royalties += 1
-        else:
-            nft_status = {
-                "index": nft_index,
-                "royalty_paid": None,
-                "transfer_info": False
-            }
-            no_transfer_info += 1
-            
-        nft_details.append(nft_status)
-    
-    return paid, unpaid, no_transfer_info, nft_details
+            async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    logger.error(f"API request failed with status {response.status}")
+                    return 0, 0, 0, []
+
+                data = await response.json()
+                nfts = data.get("nfts", [])
+
+                for nft in nfts:
+                    if nft.get("collection", {}).get("address") != NFT_COLLECTION_ADDRESS:
+                        continue
+
+                    nft_status = {
+                        "name": nft.get("metadata", {}).get("name", "Unknown NFT"),
+                        "status": "unknown"
+                    }
+
+                    try:
+                        # Check transfer history
+                        transfer_url = f"https://tonapi.io/v2/nfts/{nft['address']}/transfers"
+                        async with session.get(transfer_url, headers=headers) as transfer_response:
+                            if transfer_response.status != 200:
+                                no_transfer_info += 1
+                                nft_status["status"] = "unknown"
+                                continue
+
+                            transfer_data = await transfer_response.json()
+                            transfers = transfer_data.get("transfers", [])
+
+                            if not transfers:
+                                no_transfer_info += 1
+                                nft_status["status"] = "unknown"
+                            else:
+                                # Check if royalty was paid in the last transfer
+                                last_transfer = transfers[0]
+                                if last_transfer.get("royalty_paid", False):
+                                    paid_royalties += 1
+                                    nft_status["status"] = "paid"
+                                else:
+                                    unpaid_royalties += 1
+                                    nft_status["status"] = "unpaid"
+
+                    except Exception as e:
+                        logger.error(f"Error checking transfer history: {str(e)}")
+                        no_transfer_info += 1
+                        nft_status["status"] = "unknown"
+
+                    nft_details.append(nft_status)
+
+    except Exception as e:
+        logger.error(f"Error in check_nft_royalties: {str(e)}")
+        return 0, 0, 0, []
+
+    return paid_royalties, unpaid_royalties, no_transfer_info, nft_details
 
 # Add middleware to check for language selection
 class LanguageMiddleware:
