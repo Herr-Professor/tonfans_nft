@@ -131,7 +131,16 @@ TRANSLATIONS = {
             "User: @{}\n"
             "ID: `{}`\n"
             "Wallet: `{}`"
-        )
+        ),
+        'whale_welcome': (
+            "🐳 Welcome to the $SHIVA whales bot!\n"
+            "To get access to the whale chat, you must have at least 10,000,000 $SHIVA.\n\n"
+            "After verification, you will receive an invite to the closed chat.\n\n"
+            f"CA: `{SHIVA_TOKEN_ADDRESS}`"
+        ),
+        'whale_verification_success': "🎉 Congratulations! Your wallet has been verified and you have enough $SHIVA tokens. Welcome to the Whale Club!",
+        'whale_verification_failed': "❌ Sorry, you don't have enough $SHIVA tokens to join the Whale Club. You need at least 10,000,000 $SHIVA.",
+        'whale_checking_balance': "🔍 Checking your $SHIVA balance..."
     },
     'ru': {
         'select_language': "🌐 Пожалуйста, выберите язык:",
@@ -216,7 +225,16 @@ TRANSLATIONS = {
             "Пользователь: @{}\n"
             "ID: `{}`\n"
             "Кошелек: `{}`"
-        )
+        ),
+        'whale_welcome': (
+            "🐳 Добро пожаловать в бот китов $SHIVA!\n"
+            "Для доступа в чат китов вам необходимо иметь не менее 10,000,000 $SHIVA.\n\n"
+            "После проверки вы получите приглашение в закрытый чат.\n\n"
+            f"CA: `{SHIVA_TOKEN_ADDRESS}`"
+        ),
+        'whale_verification_success': "🎉 Поздравляем! Ваш кошелек проверен, и у вас достаточно токенов $SHIVA. Добро пожаловать в Клуб Китов!",
+        'whale_verification_failed': "❌ Извините, у вас недостаточно токенов $SHIVA для входа в Клуб Китов. Необходимо минимум 10,000,000 $SHIVA.",
+        'whale_checking_balance': "🔍 Проверяю ваш баланс $SHIVA..."
     }
 }
 
@@ -474,7 +492,7 @@ async def check_nft_royalties(wallet_address: str) -> Tuple[int, int, int, List[
             
         nft_details.append(nft_status)
     
-    return paid_royalties, unpaid_royalties, no_transfer_info, nft_details
+    return paid, unpaid, no_transfer_info, nft_details
 
 # Add middleware to check for language selection
 class LanguageMiddleware:
@@ -686,7 +704,52 @@ async def verify_command(message: types.Message, state: FSMContext):
             [InlineKeyboardButton(text=translations['buy_nft_button'], url=NFT_MARKETPLACE_LINK)]
         ])
         await message.answer(translations['no_nft_found'], reply_markup=keyboard)
+
+@dp.message(Command("whale"))
+async def whale_command(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    user_data = await get_user_data(user_id)
+    user_language = await get_user_language(user_id)
     
+    if not user_data or not user_data[2]:  # Check if user exists and has wallet
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Start Verification", callback_data="verify")]
+        ])
+        await message.reply(TRANSLATIONS[user_language]['start_verification'])
+        return
+
+    wallet_address = user_data[2]
+    await message.reply(TRANSLATIONS[user_language]['whale_checking_balance'])
+    
+    # Check SHIVA token balance
+    balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+    formatted_balance = balance / 1e9  # Convert from nano to regular units
+    
+    if formatted_balance >= 10_000_000:  # 10M SHIVA threshold
+        # Create invite link for whale group
+        invite_link = "https://t.me/+X44w-gPPj3AzYWU0"  # Replace with actual whale group invite link
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Join Whale Club 🐳", url=invite_link)]
+        ])
+        await message.reply(
+            TRANSLATIONS[user_language]['whale_verification_success'],
+            reply_markup=keyboard
+        )
+        
+        # Notify admins
+        admin_message = (
+            f"🐳 New Whale Verified!\n"
+            f"User: @{message.from_user.username}\n"
+            f"ID: {user_id}\n"
+            f"Wallet: {wallet_address}\n"
+            f"$SHIVA Balance: {formatted_balance:,.2f}"
+        )
+        await notify_admin(admin_message)
+    else:
+        await message.reply(
+            TRANSLATIONS[user_language]['whale_verification_failed']
+        )
+
 @dp.message(Command('search'))
 async def search_user(message: types.Message):
     if str(message.from_user.id) not in ADMIN_IDS:
