@@ -176,23 +176,22 @@ TRANSLATIONS = {
         'help_title': "📚 *Available Commands*",
         'help_description': "Here are all the available commands:",
         'help_commands': """
-🔷 *Basic Commands*
-/start - Start the bot and select language
-/wallet - Submit or update your wallet address
-/verify - Start verification process for group access
+        🔷 *Basic Commands*
+        /start - Start the bot and select language
+        /verify - Start verification process for group access
 
-🏦 *Token Commands*
-/price - Show current SHIVA price
-/buy - Get link to buy SHIVA tokens
-/buy_nft - Get link to buy SHIVA NFT
-/top - Show top 10 SHIVA holders
+        🏦 *Token Commands*
+        /price - Show current SHIVA price
+        /buy - Get link to buy SHIVA tokens
+        /buy_nft - Get link to buy SHIVA NFT
+        /top - Show top 10 SHIVA holders
 
-📊 *Statistics*
-/stats - Show community statistics
+        📊 *Statistics*
+        /stats - Show community statistics
 
-❓ *Help*
-/help - Show this help message
-""",
+        ❓ *Help*
+        /help - Show this help message
+        """,
     },
     'ru': {
         'select_language': "🌐 Пожалуйста, выберите язык:",
@@ -321,23 +320,22 @@ TRANSLATIONS = {
         'help_title': "📚 *Доступные команды*",
         'help_description': "Вот все доступные команды:",
         'help_commands': """
-🔷 *Основные команды*
-/start - Запустить бота и выбрать язык
-/wallet - Отправить или обновить адрес кошелька
-/verify - Начать процесс верификации для доступа к группе
+        🔷 *Основные команды*
+        /start - Запустить бота и выбрать язык
+        /verify - Начать процесс верификации для доступа к группе
 
-🏦 *Команды токенов*
-/price - Показать текущую цену SHIVA
-/buy - Получить ссылку для покупки токенов SHIVA
-/buy_nft - Получить ссылку для покупки NFT SHIVA
-/top - Показать топ-10 держателей SHIVA
+        🏦 *Команды токенов*
+        /price - Показать текущую цену SHIVA
+        /buy - Получить ссылку для покупки токенов SHIVA
+        /buy_nft - Получить ссылку для покупки NFT SHIVA
+        /top - Показать топ-10 держателей SHIVA
 
-📊 *Статистика*
-/stats - Показать статистику сообщества
+        📊 *Статистика*
+        /stats - Показать статистику сообщества
 
-❓ *Помощь*
-/help - Показать это сообщение помощи
-""",
+        ❓ *Помощь*
+        /help - Показать это сообщение помощи
+        """,
     }
 }
 
@@ -442,6 +440,56 @@ async def notify_admin(message: str):
             logger.error(f"Failed to notify admin {admin_id}: {e}")
 
 # Transaction verification function
+async def check_transaction(address: str, memo: str) -> bool:
+    """Check if a transaction with the given memo exists for the address."""
+    API_BASE_URL = "https://toncenter.com/api/v2"
+    headers = {"Authorization": f"Bearer {TON_API_KEY}"}
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            # Get transactions for the address
+            params = {
+                "address": address,
+                "limit": 50  # Check last 50 transactions
+            }
+            async with session.get(
+                f"{API_BASE_URL}/getTransactions",
+                headers=headers,
+                params=params
+            ) as response:
+                if response.status != 200:
+                    logger.error(f"Error getting transactions: {response.status}")
+                    return False
+                
+                data = await response.json()
+                if not data.get('ok'):
+                    logger.error(f"API error: {data.get('error', 'Unknown error')}")
+                    return False
+                
+                transactions = data.get('result', [])
+                
+                # Check each transaction for the memo
+                for tx in transactions:
+                    try:
+                        # Check in_msg for incoming transactions
+                        if 'in_msg' in tx and tx['in_msg'].get('message') == memo:
+                            return True
+                            
+                        # Also check out_msgs for outgoing transactions
+                        for out_msg in tx.get('out_msgs', []):
+                            if out_msg.get('message') == memo:
+                                return True
+                    except Exception as e:
+                        logger.error(f"Error checking transaction message: {e}")
+                        continue
+                
+                logger.info(f"No transaction found with memo {memo} for address {address}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error in check_transaction: {e}")
+            return False
+
 async def check_nft_ownership(wallet_address: str) -> bool:
     url = f'https://tonapi.io/v2/accounts/{wallet_address}/nfts?collection={NFT_COLLECTION_ADDRESS}&limit=1000&offset=0&indirect_ownership=false'
     try:
@@ -452,49 +500,6 @@ async def check_nft_ownership(wallet_address: str) -> bool:
     except Exception as e:
         logger.error(f"Error checking NFT ownership for {wallet_address}: {e}")
         return False
-
-async def check_transaction(address: str, memo: str) -> bool:
-    API_BASE_URL = "https://toncenter.com/api/v3"
-    
-    async with aiohttp.ClientSession() as session:
-        try:
-            params = {
-                "address": address,
-                "limit": 1,
-                "api_key": TON_API_KEY
-            }
-            async with session.get(f"{API_BASE_URL}/getTransactions", params=params) as response:
-                if response.status != 200:
-                    logger.error(f"API request failed with status {response.status}")
-                    return False
-                
-                data = await response.json()
-                if not data.get("ok", False):
-                    logger.error(f"API request failed: {data.get('error', 'Unknown error')}")
-                    return False
-                
-                transactions = data.get("result", [])
-                if not transactions:
-                    logger.info("No transactions found")
-                    return False
-                
-                transaction = transactions[0]
-                in_msg = transaction.get("in_msg", {})
-                message = in_msg.get("message", "")
-                
-                if isinstance(message, str):
-                    decoded_message = message
-                else:
-                    try:
-                        decoded_message = base64.b64decode(message).decode('utf-8')
-                    except:
-                        decoded_message = str(message)
-                
-                return memo in decoded_message
-                
-        except Exception as e:
-            logger.error(f"Error checking transaction: {str(e)}")
-            return False
 
 async def check_token_balance(user_address: str, jetton_master_address: str) -> Tuple[int, float]:
     """
@@ -687,6 +692,7 @@ async def get_top_holders(limit: int = 10) -> List[Tuple[str, float]]:
         holders = []
         for wallet in wallets:
             raw_balance, formatted_balance = await check_token_balance(wallet, SHIVA_TOKEN_ADDRESS)
+            
             if formatted_balance > 0:
                 holders.append((wallet, formatted_balance))
 
@@ -794,53 +800,97 @@ async def handle_language_selection(message: types.Message, state: FSMContext):
     await state.set_state(UserState.waiting_for_wallet)
 
 # Updated wallet submission handler
-@dp.message(UserState.waiting_for_wallet)
-async def handle_wallet_input(message: types.Message, state: FSMContext):
+@dp.message(Command("wallet"))
+async def wallet_command(message: Message, state: FSMContext):
+    """Direct wallet submission command."""
+    command_parts = message.text.split()
     user_id = message.from_user.id
-    username = message.from_user.username
+    username = message.from_user.username or "Unknown"
     
     # Get user's language
-    conn = sqlite3.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT language FROM members WHERE user_id = ?', (user_id,))
-    result = cursor.fetchone()
-    conn.close()
+    user_language = await get_user_language(user_id)
+    translations = TRANSLATIONS[user_language]
     
-    language = result[0] if result else 'en'
-    translations = TRANSLATIONS[language]
-    
-    wallet_address = message.text.strip()
-    
-    # Basic wallet address validation
-    if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
-        await message.answer(translations['invalid_wallet'])
+    # If no wallet provided in command, wait for next message
+    if len(command_parts) == 1:
+        await state.set_state(UserState.waiting_for_wallet)
+        await message.reply(translations['enter_wallet'])
         return
     
-    # Generate verification memo
-    verification_memo = f"verify_{user_id}_{int(time_module.time())}"
+    # Get wallet from command
+    wallet_address = command_parts[1].strip()
     
-    # Save wallet address
-    await save_user_data(user_id, username, wallet_address, False, verification_memo)
+    # Basic wallet validation
+    if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
+        await message.reply(translations['wallet_invalid'])
+        return
     
-    # Notify admin about new verification attempt
-    admin_message = translations['admin_new_verification'].format(
-        username,
-        user_id,
-        wallet_address,
-        verification_memo
-    )
-    await notify_admin(admin_message)
+    try:
+        # Check NFT ownership and balance
+        has_nft = await check_nft_ownership(wallet_address)
+        _, shiva_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+        
+        # Save to database
+        await save_user_data(user_id, username, wallet_address, has_nft)
+        
+        # Notify user (simple message)
+        await message.reply(translations['wallet_saved'])
+        
+        # Notify admin
+        admin_message = translations['admin_wallet_verified' if has_nft else 'admin_wallet_unverified'].format(
+            username,
+            user_id,
+            wallet_address,
+            shiva_balance
+        )
+        await notify_admin(admin_message)
+        
+    except Exception as e:
+        logger.error(f"Error in wallet command: {e}")
+        await notify_admin(f"Error saving wallet for @{username} (ID: {user_id}): {str(e)}")
+
+@dp.message(UserState.waiting_for_wallet)
+async def handle_wallet_input(message: Message, state: FSMContext):
+    """Handle wallet address input after /wallet command."""
+    user_id = message.from_user.id
+    username = message.from_user.username or "Unknown"
+    wallet_address = message.text.strip()
     
-    # Send verification instructions
-    await message.answer(
-        translations['verification_instructions'].format(
-            VERIFICATION_WALLET,
-            verification_memo
-        ),
-        parse_mode="Markdown"
-    )
+    # Get user's language
+    user_language = await get_user_language(user_id)
+    translations = TRANSLATIONS[user_language]
     
-    await state.set_state(UserState.waiting_for_transaction)
+    # Basic wallet validation
+    if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
+        await message.reply(translations['wallet_invalid'])
+        return
+    
+    try:
+        # Check NFT ownership and balance
+        has_nft = await check_nft_ownership(wallet_address)
+        _, shiva_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+        
+        # Save to database
+        await save_user_data(user_id, username, wallet_address, has_nft)
+        
+        # Clear the state
+        await state.clear()
+        
+        # Notify user (simple message)
+        await message.reply(translations['wallet_saved'])
+        
+        # Notify admin
+        admin_message = translations['admin_wallet_verified' if has_nft else 'admin_wallet_unverified'].format(
+            username,
+            user_id,
+            wallet_address,
+            shiva_balance
+        )
+        await notify_admin(admin_message)
+        
+    except Exception as e:
+        logger.error(f"Error processing wallet: {e}")
+        await notify_admin(f"Error saving wallet for @{username} (ID: {user_id}): {str(e)}")
 
 @dp.message(Command('verify'))
 async def verify_command(message: types.Message, state: FSMContext):
@@ -1439,98 +1489,6 @@ async def buy_nft_command(message: Message):
         reply_markup=keyboard,
         parse_mode="Markdown"
     )
-
-@dp.message(Command("wallet"))
-async def wallet_command(message: Message, state: FSMContext):
-    """Direct wallet verification command."""
-    command_parts = message.text.split()
-    user_id = message.from_user.id
-    username = message.from_user.username or "Unknown"
-    
-    # Get user's language
-    user_language = await get_user_language(user_id)
-    translations = TRANSLATIONS[user_language]
-    
-    # If no wallet provided in command, wait for next message
-    if len(command_parts) == 1:
-        await state.set_state(UserState.waiting_for_wallet)
-        await message.reply(translations['enter_wallet'])
-        return
-    
-    # Get wallet from command
-    wallet_address = command_parts[1].strip()
-    
-    # Basic wallet validation
-    if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
-        await message.reply(translations['wallet_invalid'])
-        return
-    
-    try:
-        # Check NFT ownership and balance
-        has_nft = await check_nft_ownership(wallet_address)
-        _, shiva_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
-        
-        # Save to database
-        await save_user_data(user_id, username, wallet_address, has_nft)
-        
-        # Notify user (simple message)
-        await message.reply(translations['wallet_saved'])
-        
-        # Notify admin (detailed message)
-        admin_message = translations['admin_wallet_verified' if has_nft else 'admin_wallet_unverified'].format(
-            username,
-            user_id,
-            wallet_address,
-            shiva_balance
-        )
-        await notify_admin(admin_message)
-        
-    except Exception as e:
-        logger.error(f"Error in wallet command: {e}")
-        await notify_admin(f"Error saving wallet for @{username} (ID: {user_id}): {str(e)}")
-
-@dp.message(UserState.waiting_for_wallet)
-async def handle_wallet_input(message: Message, state: FSMContext):
-    """Handle wallet address input after /wallet command."""
-    user_id = message.from_user.id
-    username = message.from_user.username or "Unknown"
-    wallet_address = message.text.strip()
-    
-    # Get user's language
-    user_language = await get_user_language(user_id)
-    translations = TRANSLATIONS[user_language]
-    
-    # Basic wallet validation
-    if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
-        await message.reply(translations['wallet_invalid'])
-        return
-    
-    try:
-        # Check NFT ownership and balance
-        has_nft = await check_nft_ownership(wallet_address)
-        _, shiva_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
-        
-        # Save to database
-        await save_user_data(user_id, username, wallet_address, has_nft)
-        
-        # Clear the state
-        await state.clear()
-        
-        # Notify user (simple message)
-        await message.reply(translations['wallet_saved'])
-        
-        # Notify admin (detailed message)
-        admin_message = translations['admin_wallet_verified' if has_nft else 'admin_wallet_unverified'].format(
-            username,
-            user_id,
-            wallet_address,
-            shiva_balance
-        )
-        await notify_admin(admin_message)
-        
-    except Exception as e:
-        logger.error(f"Error processing wallet: {e}")
-        await notify_admin(f"Error saving wallet for @{username} (ID: {user_id}): {str(e)}")
 
 @dp.message(Command("help"))
 async def help_command(message: Message):
