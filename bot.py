@@ -27,6 +27,7 @@ API_TOKEN = '8067666224:AAELEOrjl0lHDUsqP7NUFU8FTYuzRt972ik'
 NFT_COLLECTION_ADDRESS = 'EQDmUOKwwa6KU0YFbA_CZTGccRdh5SWIQdBDKg741ecOqzR0'
 GROUP_INVITE_LINK = "https://t.me/+X44w-gPPj3AzYWU0"
 NFT_MARKETPLACE_LINK = "https://getgems.io/collection/EQDmUOKwwa6KU0YFbA_CZTGccRdh5SWIQdBDKg741ecOqzR0"
+SHIVA_DEX_LINK = "https://dedust.io/swap/EQDQoc5M3Bh8eWFephi9bClhevelbZZvW-vKTDbxB8pbwNDN"
 ADMIN_IDS = ["1499577590","5851290427"]
 VERIFICATION_WALLET = "UQA53kg3IzUo2PTuaZxXB3qK7fICyc1u_Yu8d0JDYJRPVWpz"
 TON_API_KEY = "6767227019a948426ee2ef5a310f490e43cc1ca23363b932303002e59988f833"
@@ -140,7 +141,58 @@ TRANSLATIONS = {
         ),
         'whale_verification_success': "🎉 Congratulations! Your wallet has been verified and you have enough $SHIVA tokens. Welcome to the Whale Club!",
         'whale_verification_failed': "❌ Sorry, you don't have enough $SHIVA tokens to join the Whale Club. You need at least 10,000,000 $SHIVA.",
-        'whale_checking_balance': "🔍 Checking your $SHIVA balance..."
+        'whale_checking_balance': "🔍 Checking your $SHIVA balance...",
+        'stats_title': "📊 *Community Statistics*",
+        'stats_verified_users': "✅ Verified Users: {}",
+        'stats_total_whales': "🐳 Total Whales: {}",
+        'stats_total_shiva': "💰 Total $SHIVA: {:,.2f}",
+        'stats_average_shiva': "📈 Average $SHIVA/member: {:,.2f}",
+        'stats_nft_stats': "🖼 NFT Statistics:",
+        'stats_paid_royalties': "  ✓ Paid Royalties: {}",
+        'stats_unpaid_royalties': "  ✗ Unpaid Royalties: {}",
+        'stats_unknown_royalties': "  • Unknown Status: {}",
+        'stats_error': "❌ Error fetching statistics. Please try again later.",
+        'stats_loading': "🔄 Calculating community statistics...",
+        'price_title': "💎 *SHIVA Price Information*",
+        'price_loading': "🔄 Fetching current SHIVA price...",
+        'price_current': "💰 Current Price: {} TON",
+        'price_error': "❌ Error fetching price data. Please try again later.",
+        'top_title': "🏆 *Top SHIVA Holders*",
+        'top_loading': "🔄 Calculating top holders...",
+        'top_holder_format': "#{} 👤 `{}...{}` - {:,.2f} SHIVA",
+        'top_error': "❌ Error fetching top holders. Please try again later.",
+        'no_holders': "No SHIVA holders found in the database.",
+        'buy_nft_title': "🖼 *Buy SHIVA NFT*",
+        'buy_nft_description': "You can buy SHIVA NFT on GetGems marketplace. Click the button below to view the collection:",
+        'buy_shiva_title': "💎 *Buy SHIVA Tokens*",
+        'buy_shiva_description': "You can buy SHIVA tokens on DeDust.io. Click the button below to open the swap page:",
+        'buy_shiva_button': "Buy SHIVA",
+        'wallet_saved': "✅ Wallet saved successfully!",
+        'wallet_invalid': "❌ Invalid wallet address. Please make sure it starts with 'EQ' or 'UQ'.",
+        'admin_new_wallet': "💼 *New Wallet Added*\nUser: @{}\nID: `{}`\nWallet: `{}`",
+        'admin_wallet_verified': "✅ *New Wallet Verified:*\nUser: @{}\nID: `{}`\nWallet: `{}`\nNFT Status: ✅ Has NFT\nSHIVA Balance: {:,.2f}",
+        'admin_wallet_unverified': "❌ *Unverified Wallet:*\nUser: @{}\nID: `{}`\nWallet: `{}`\nNFT Status: ❌ No NFT\nSHIVA Balance: {:,.2f}",
+        'checking_wallet': "🔍 Checking your wallet...",
+        'help_title': "📚 *Available Commands*",
+        'help_description': "Here are all the available commands:",
+        'help_commands': """
+🔷 *Basic Commands*
+/start - Start the bot and select language
+/wallet - Submit or update your wallet address
+/verify - Start verification process for group access
+
+🏦 *Token Commands*
+/price - Show current SHIVA price
+/buy - Get link to buy SHIVA tokens
+/buy_nft - Get link to buy SHIVA NFT
+/top - Show top 10 SHIVA holders
+
+📊 *Statistics*
+/stats - Show community statistics
+
+❓ *Help*
+/help - Show this help message
+""",
     },
     'ru': {
         'select_language': "🌐 Пожалуйста, выберите язык:",
@@ -150,7 +202,7 @@ TRANSLATIONS = {
             "1. Перейдите в настройки Telegram\n"
             "2. Нажмите на свой профиль\n"
             "3. Нажмите 'Имя пользователя'\n"
-            "4. Установите имя пользовател\n\n"
+            "4. Установите имя пользователя\n\n"
             "После установки имени пользователя вернитесь и снова используйте команду /start."
         ),
         'welcome_message': (
@@ -179,7 +231,7 @@ TRANSLATIONS = {
             "Попробуйте снова с командой /verify после отправки транзакции."
         ),
         'transaction_verified': "✅ Транзакция подтверждена! Теперь проверяю владение NFT...",
-        'checking_royalties': "🔍 Проверяю стат��с роялти NFT...",
+        'checking_royalties': "🔍 Проверяю статус роялти NFT...",
         'royalty_status': (
             "📊 Статус роялти NFT:\n"
             "✅ NFT с оплаченными роялти: {}\n"
@@ -187,11 +239,11 @@ TRANSLATIONS = {
             "ℹ️ NFT без информации о переводе: {}\n\n"
             "Подробный статус NFT:\n"
         ),
-        'nft_status_paid': "✅ Роялти ��плачено",
+        'nft_status_paid': "✅ Роялти оплачено",
         'nft_status_unpaid': "❌ Роялти не оплачено",
         'nft_status_unknown': "ℹ️ Нет информации о переводе",
         'success_message': "🎉 Поздравляем! Ваш кошелек подтвержден и владение NFT tonfans подтверждено.",
-        'royalty_warning': "\n⚠️ Некоторые из ваших NFT имеют неоплаченные роялти. Пожалуйста, рассмотрит возможность их оплаты для поддержки проекта.",
+        'royalty_warning': "\n⚠️ Некоторые из ваших NFT имеют неоплаченные роялти. Пожалуйста, рассмотрите возможность их оплаты для поддержки проекта.",
         'join_group': "\nТеперь вы можете присоединиться к нашей эксклюзивной группе:",
         'no_nft_found': (
             "✅ Кошелек подтвержден, но NFT не найден в вашем кошельке.\n"
@@ -199,25 +251,25 @@ TRANSLATIONS = {
             "Вы можете получить его здесь:"
         ),
         'join_group_button': "Присоединиться к группе",
-        'buy_nft_button': "Купит���� NFT",
-        'nft_marketplace_button': "NFT Маркетп��ес",
+        'buy_nft_button': "Купить NFT",
+        'nft_marketplace_button': "NFT Маркетплейс",
         'token_balance': "Ваш баланс $SHIVA: {:,.2f}",
         'no_token_balance': "У вас нет токенов $SHIVA в кошельке.",
         'start_verification': "Пожалуйста, сначала начните процесс верификации, используя команду /start.",
         'no_pending_verification': "Не найдено неотправленных запросов на верификацию. Пожалуйста, начните снова, используя команду /start.",
         'admin_new_verification': (
-            "�� *Новый запрос на верификацию:*\n"
-            "Пользовате��ь: @{}\n"
+            "🆕 *Новый запрос на верификацию:*\n"
+            "Пользователь: @{}\n"
             "ID: `{}`\n"
             "Кошелек: `{}`\n"
             "Memo: `{}`"
         ),
         'admin_verification_success': (
-            "✅ *Верификация NFT успешно завершена:*\n"
+            "✅ Верификация NFT успешна:\n"
             "Пользователь: @{}\n"
-            "ID: `{}`\n"
-            "Кошелек: `{}`\n"
-            "$SHIVA Balance: {:.2f}\n"
+            "ID: {}\n"
+            "Кошелек: {}\n"
+            "Баланс $SHIVA: {:.2f}\n"
             "Статус роялти: {} оплачено, {} не оплачено, {} неизвестно"
         ),
         'admin_no_nft': (
@@ -227,14 +279,65 @@ TRANSLATIONS = {
             "Кошелек: `{}`"
         ),
         'whale_welcome': (
-            "🐳 Добро пожаловать в бот китов $SHIVA!\n"
-            "Для доступа в чат китов вам необходимо иметь не менее 10,000,000 $SHIVA.\n\n"
-            "После проверки вы получите приглашение в закрытый чат.\n\n"
+            "🐳 Добро пожаловать в бот $SHIVA для китов!\n"
+            "Для доступа в чат китов вам необходимо иметь минимум 10,000,000 $SHIVA.\n\n"
+            "После верификации вы получите приглашение в закрытый чат.\n\n"
             f"CA: `{SHIVA_TOKEN_ADDRESS}`"
         ),
-        'whale_verification_success': "🎉 Поздравляем! Ваш кошелек проверен, и у вас достаточно токенов $SHIVA. Добро пожаловать в Клуб Китов!",
-        'whale_verification_failed': "❌ Извините, у вас недостаточно токенов $SHIVA для входа в Клуб Китов. Необходимо минимум 10,000,000 $SHIVA.",
-        'whale_checking_balance': "🔍 Проверяю ваш баланс $SHIVA..."
+        'whale_verification_success': "🎉 Поздравляем! Ваш кошелек подтвержден и у вас достаточно токенов $SHIVA. Добро пожаловать в Клуб Китов!",
+        'whale_verification_failed': "❌ Извините, у вас недостаточно токенов $SHIVA для вступления в Клуб Китов. Необходимо минимум 10,000,000 $SHIVA.",
+        'whale_checking_balance': "🔍 Проверяю ваш баланс $SHIVA...",
+        'stats_title': "📊 *Статистика сообщества*",
+        'stats_verified_users': "✅ Проверенных пользователей: {}",
+        'stats_total_whales': "🐳 Всего китов: {}",
+        'stats_total_shiva': "💰 Всего $SHIVA: {:,.2f}",
+        'stats_average_shiva': "📈 Среднее $SHIVA/участник: {:,.2f}",
+        'stats_nft_stats': "🖼 Статистика NFT:",
+        'stats_paid_royalties': "  ✓ Оплаченные роялти: {}",
+        'stats_unpaid_royalties': "  ✗ Неоплаченные роялти: {}",
+        'stats_unknown_royalties': "  • Неизвестный статус: {}",
+        'stats_error': "❌ Ошибка при получении статистики. Пожалуйста, попробуйте позже.",
+        'stats_loading': "🔄 Подсчитываю статистику сообщества...",
+        'price_title': "💎 *Информация о цене SHIVA*",
+        'price_loading': "🔄 Получаю текущую цену SHIVA...",
+        'price_current': "💰 Текущая цена: {} TON",
+        'price_error': "❌ Ошибка при получении данных о цене. Пожалуйста, попробуйте позже.",
+        'top_title': "🏆 *Топ держателей SHIVA*",
+        'top_loading': "🔄 Подсчитываю топ держателей...",
+        'top_holder_format': "#{} 👤 `{}...{}` - {:,.2f} SHIVA",
+        'top_error': "❌ Ошибка при получении топ держателей. Пожалуйста, попробуйте позже.",
+        'no_holders': "Держатели SHIVA не найдены в базе данных.",
+        'buy_nft_title': "🖼 *Купить SHIVA NFT*",
+        'buy_nft_description': "Вы можете купить SHIVA NFT на маркетплейсе GetGems. Нажмите кнопку ниже, чтобы посмотреть коллекцию:",
+        'buy_shiva_title': "💎 *Купить токены SHIVA*",
+        'buy_shiva_description': "Вы можете купить токены SHIVA на DeDust.io. Нажмите кнопку ниже, чтобы открыть страницу обмена:",
+        'buy_shiva_button': "Купить SHIVA",
+        'wallet_saved': "✅ Кошелек успешно сохранен!",
+        'wallet_invalid': "❌ Неверный адрес кошелька. Убедитесь, что он начинается с 'EQ' или 'UQ'.",
+        'admin_new_wallet': "💼 *Добавлен новый кошелек*\nПользователь: @{}\nID: `{}`\nКошелек: `{}`",
+        'admin_wallet_verified': "✅ *Новый верифицированный кошелек:*\nПользователь: @{}\nID: `{}`\nКошелек: `{}`\nСтатус NFT: ✅ Есть NFT\nБаланс SHIVA: {:,.2f}",
+        'admin_wallet_unverified': "❌ *Неверифицированный кошелек:*\nПользователь: @{}\nID: `{}`\nКошелек: `{}`\nСтатус NFT: ❌ Нет NFT\nБаланс SHIVA: {:,.2f}",
+        'checking_wallet': "🔍 Проверяю ваш кошелек...",
+        'help_title': "📚 *Доступные команды*",
+        'help_description': "Вот все доступные команды:",
+        'help_commands': """
+🔷 *Основные команды*
+/start - Запустить бота и выбрать язык
+/wallet - Отправить или обновить адрес кошелька
+/verify - Начать процесс верификации для доступа к группе
+
+🏦 *Команды токенов*
+/price - Показать текущую цену SHIVA
+/buy - Получить ссылку для покупки токенов SHIVA
+/buy_nft - Получить ссылку для покупки NFT SHIVA
+/top - Показать топ-10 держателей SHIVA
+
+📊 *Статистика*
+/stats - Показать статистику сообщества
+
+❓ *Помощь*
+/help - Показать это сообщение помощи
+""",
     }
 }
 
@@ -351,7 +454,7 @@ async def check_nft_ownership(wallet_address: str) -> bool:
         return False
 
 async def check_transaction(address: str, memo: str) -> bool:
-    API_BASE_URL = "https://toncenter.com/api/v2"
+    API_BASE_URL = "https://toncenter.com/api/v3"
     
     async with aiohttp.ClientSession() as session:
         try:
@@ -393,14 +496,16 @@ async def check_transaction(address: str, memo: str) -> bool:
             logger.error(f"Error checking transaction: {str(e)}")
             return False
 
-async def check_token_balance(user_address: str, jetton_master_address: str) -> int:
-    API_BASE_URL = "https://tonapi.io/v2"
-    
-    async with aiohttp.ClientSession() as session:
-        try:
-            url = f"{API_BASE_URL}/accounts/{user_address}/jettons/{jetton_master_address}"
+async def check_token_balance(user_address: str, jetton_master_address: str) -> Tuple[int, float]:
+    """
+    Check SHIVA token balance for a given wallet address.
+    Returns both raw balance and formatted balance.
+    """
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = f"https://tonapi.io/v2/accounts/{user_address}/jettons/{jetton_master_address}"
             params = {
-                "currencies": "shiva"
+                "currencies": "ton,usd"
             }
             headers = {
                 "accept": "application/json",
@@ -410,18 +515,25 @@ async def check_token_balance(user_address: str, jetton_master_address: str) -> 
             async with session.get(url, params=params, headers=headers) as response:
                 if response.status != 200:
                     logger.error(f"API request failed with status {response.status}")
-                    return 0
+                    return 0, 0.0
                 
                 data = await response.json()
-                balance = int(data.get("balance", "0"))
-                logger.info(f"$SHIVA balance for user address {user_address}: {balance}")
-                return balance
+                balance = data.get("balance", "0")
                 
-        except Exception as e:
-            logger.error(f"Error checking token balance: {str(e)}")
-            logger.error(f"Error type: {type(e)}")
-            logger.error("Error traceback: ", exc_info=True)
-            return 0
+                try:
+                    raw_balance = int(balance)
+                    formatted_balance = raw_balance / 1e9  # Convert to actual SHIVA tokens
+                    logger.info(f"$SHIVA balance for address {user_address}: {formatted_balance:,.2f}")
+                    return raw_balance, formatted_balance
+                except (ValueError, TypeError) as e:
+                    logger.error(f"Error converting balance to integer: {str(e)}")
+                    return 0, 0.0
+                
+    except Exception as e:
+        logger.error(f"Error checking token balance: {str(e)}")
+        logger.error(f"Error type: {type(e)}")
+        logger.error("Error traceback: ", exc_info=True)
+        return 0, 0.0
 
 async def check_nft_royalties(wallet_address: str):
     """
@@ -463,23 +575,22 @@ async def check_nft_royalties(wallet_address: str):
                             if transfer_response.status != 200:
                                 no_transfer_info += 1
                                 nft_status["status"] = "unknown"
-                                continue
-
-                            transfer_data = await transfer_response.json()
-                            transfers = transfer_data.get("transfers", [])
-
-                            if not transfers:
-                                no_transfer_info += 1
-                                nft_status["status"] = "unknown"
                             else:
                                 # Check if royalty was paid in the last transfer
-                                last_transfer = transfers[0]
-                                if last_transfer.get("royalty_paid", False):
-                                    paid_royalties += 1
-                                    nft_status["status"] = "paid"
+                                transfer_data = await transfer_response.json()
+                                transfers = transfer_data.get("transfers", [])
+
+                                if not transfers:
+                                    no_transfer_info += 1
+                                    nft_status["status"] = "unknown"
                                 else:
-                                    unpaid_royalties += 1
-                                    nft_status["status"] = "unpaid"
+                                    last_transfer = transfers[0]
+                                    if last_transfer.get("royalty_paid", False):
+                                        paid_royalties += 1
+                                        nft_status["status"] = "paid"
+                                    else:
+                                        unpaid_royalties += 1
+                                        nft_status["status"] = "unpaid"
 
                     except Exception as e:
                         logger.error(f"Error checking transfer history: {str(e)}")
@@ -493,6 +604,98 @@ async def check_nft_royalties(wallet_address: str):
         return 0, 0, 0, []
 
     return paid_royalties, unpaid_royalties, no_transfer_info, nft_details
+
+async def get_community_nft_stats():
+    """Get NFT royalty statistics for all community members."""
+    try:
+        conn = sqlite3.connect('members.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT wallet_address FROM members WHERE wallet_address IS NOT NULL')
+        wallets = [row[0] for row in cursor.fetchall()]
+        conn.close()
+
+        total_paid = 0
+        total_unpaid = 0
+        total_unknown = 0
+
+        for wallet in wallets:
+            paid, unpaid, unknown, _ = await check_nft_royalties(wallet)
+            total_paid += paid
+            total_unpaid += unpaid
+            total_unknown += unknown
+
+        return total_paid, total_unpaid, total_unknown
+    except Exception as e:
+        logger.error(f"Error getting community NFT stats: {e}")
+        return 0, 0, 0
+
+async def get_community_shiva_stats():
+    """Get SHIVA token statistics for all community members."""
+    try:
+        conn = sqlite3.connect('members.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT wallet_address FROM members WHERE wallet_address IS NOT NULL')
+        wallets = [row[0] for row in cursor.fetchall()]
+        conn.close()
+
+        total_shiva = 0
+        whale_count = 0
+
+        for wallet in wallets:
+            raw_balance, formatted_balance = await check_token_balance(wallet, SHIVA_TOKEN_ADDRESS)
+            total_shiva += formatted_balance
+            if formatted_balance >= 10_000_000:
+                whale_count += 1
+
+        return total_shiva, whale_count, len(wallets)
+    except Exception as e:
+        logger.error(f"Error getting community SHIVA stats: {e}")
+        return 0, 0, 0
+
+async def get_shiva_price() -> float:
+    """Get current SHIVA price in TON from DEX."""
+    API_BASE_URL = "https://toncenter.com/api/v3"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            # Get price from DEX pool
+            headers = {"Authorization": f"Bearer {TON_API_KEY}"}
+            async with session.get(
+                f"{API_BASE_URL}/jetton/{SHIVA_TOKEN_ADDRESS}/price",
+                headers=headers
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return float(data['price'])
+                else:
+                    logger.error(f"Error fetching SHIVA price: {response.status}")
+                    return None
+        except Exception as e:
+            logger.error(f"Error in get_shiva_price: {e}")
+            return None
+
+async def get_top_holders(limit: int = 10) -> List[Tuple[str, float]]:
+    """Get top SHIVA token holders."""
+    try:
+        conn = sqlite3.connect('members.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT wallet_address FROM members WHERE wallet_address IS NOT NULL')
+        wallets = [row[0] for row in cursor.fetchall()]
+        conn.close()
+
+        # Get balances for all wallets
+        holders = []
+        for wallet in wallets:
+            raw_balance, formatted_balance = await check_token_balance(wallet, SHIVA_TOKEN_ADDRESS)
+            if formatted_balance > 0:
+                holders.append((wallet, formatted_balance))
+
+        # Sort by balance and get top holders
+        holders.sort(key=lambda x: x[1], reverse=True)
+        return holders[:limit]
+    except Exception as e:
+        logger.error(f"Error getting top holders: {e}")
+        return []
 
 # Add middleware to check for language selection
 class LanguageMiddleware:
@@ -594,6 +797,7 @@ async def handle_language_selection(message: types.Message, state: FSMContext):
 @dp.message(UserState.waiting_for_wallet)
 async def handle_wallet_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
+    username = message.from_user.username
     
     # Get user's language
     conn = sqlite3.connect('members.db')
@@ -616,7 +820,16 @@ async def handle_wallet_input(message: types.Message, state: FSMContext):
     verification_memo = f"verify_{user_id}_{int(time_module.time())}"
     
     # Save wallet address
-    await save_user_data(user_id, message.from_user.username, wallet_address, False, verification_memo)
+    await save_user_data(user_id, username, wallet_address, False, verification_memo)
+    
+    # Notify admin about new verification attempt
+    admin_message = translations['admin_new_verification'].format(
+        username,
+        user_id,
+        wallet_address,
+        verification_memo
+    )
+    await notify_admin(admin_message)
     
     # Send verification instructions
     await message.answer(
@@ -663,15 +876,21 @@ async def verify_command(message: types.Message, state: FSMContext):
         )
         return
 
+    await message.answer(translations['transaction_verified'])
+
     # Check NFT ownership
     has_nft = await check_nft_ownership(wallet_address)
     
     if has_nft:
         # Check token balance
-        token_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
-        shiva_balance = token_balance / 1_000_000_000
+        raw_balance, formatted_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+        
+        # Show SHIVA balance
+        balance_message = f"Your $SHIVA balance: {formatted_balance:,.2f}"
+        await message.answer(balance_message)
         
         # Check NFT royalties
+        await message.answer(translations['checking_royalties'])
         paid, unpaid, no_info, nft_details = await check_nft_royalties(wallet_address)
         
         # Send verification status
@@ -679,37 +898,58 @@ async def verify_command(message: types.Message, state: FSMContext):
             username,
             user_id,
             wallet_address,
-            shiva_balance,
+            formatted_balance,
             paid,
             unpaid,
             no_info
         )
-        await message.answer(admin_message)
+        await notify_admin(admin_message)
         
-        # Send success message
-        success_message = translations['success_message']
+        # Format royalty status message
+        royalty_message = translations['royalty_status'].format(paid, unpaid, no_info)
+        
+        for nft in nft_details:
+            status_key = f"nft_status_{nft['status']}"
+            royalty_message += f"\n{nft['name']}: {translations[status_key]}"
+        
+        await message.answer(royalty_message)
+        await message.answer(translations['success_message'])
+        
         if unpaid > 0:
-            success_message += translations['royalty_warning']
-        success_message += translations['join_group']
+            await message.answer(translations['royalty_warning'])
         
-        # Create keyboard with group link
+        # Create keyboard with group invite
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=translations['join_group_button'], url=GROUP_INVITE_LINK)]
         ])
+        await message.answer(translations['join_group'], reply_markup=keyboard)
         
-        await message.answer(success_message, reply_markup=keyboard)
+        # Save verified status
+        await save_user_data(user_id, username, wallet_address, True)
     else:
-        # Send no NFT found message
+        # Create keyboard for NFT marketplace
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=translations['buy_nft_button'], url=NFT_MARKETPLACE_LINK)]
         ])
         await message.answer(translations['no_nft_found'], reply_markup=keyboard)
+        
+        # Notify admins
+        admin_message = translations['admin_no_nft'].format(
+            username,
+            user_id,
+            wallet_address
+        )
+        await notify_admin(admin_message)
+        
+        # Save unverified status
+        await save_user_data(user_id, username, wallet_address, False)
 
 @dp.message(Command("whale"))
 async def whale_command(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     user_data = await get_user_data(user_id)
     user_language = await get_user_language(user_id)
+    username = message.from_user.username
     
     if not user_data or not user_data[2]:  # Check if user exists and has wallet
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -722,8 +962,11 @@ async def whale_command(message: types.Message, state: FSMContext):
     await message.reply(TRANSLATIONS[user_language]['whale_checking_balance'])
     
     # Check SHIVA token balance
-    balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
-    formatted_balance = balance / 1e9  # Convert from nano to regular units
+    raw_balance, formatted_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+    
+    # Show current balance regardless of whale status
+    balance_message = TRANSLATIONS[user_language]['token_balance'].format(formatted_balance)
+    await message.reply(balance_message)
     
     if formatted_balance >= 10_000_000:  # 10M SHIVA threshold
         # Create invite link for whale group
@@ -736,19 +979,34 @@ async def whale_command(message: types.Message, state: FSMContext):
             reply_markup=keyboard
         )
         
-        # Notify admins
+        # Notify admins about new whale
         admin_message = (
-            f"🐳 New Whale Verified!\n"
-            f"User: @{message.from_user.username}\n"
-            f"ID: {user_id}\n"
-            f"Wallet: {wallet_address}\n"
+            "🐳 *New Whale Verified!*\n"
+            f"User: @{username}\n"
+            f"ID: `{user_id}`\n"
+            f"Wallet: `{wallet_address}`\n"
             f"$SHIVA Balance: {formatted_balance:,.2f}"
         )
         await notify_admin(admin_message)
     else:
-        await message.reply(
-            TRANSLATIONS[user_language]['whale_verification_failed']
+        # Calculate how many more SHIVA needed
+        shiva_needed = 10_000_000 - formatted_balance
+        message_text = (
+            f"{TRANSLATIONS[user_language]['whale_verification_failed']}\n"
+            f"You need {shiva_needed:,.2f} more $SHIVA to qualify."
         )
+        await message.reply(message_text)
+        
+        # Notify admins about failed whale verification
+        admin_message = (
+            "❌ *Failed Whale Verification:*\n"
+            f"User: @{username}\n"
+            f"ID: `{user_id}`\n"
+            f"Wallet: `{wallet_address}`\n"
+            f"Current Balance: {formatted_balance:,.2f}\n"
+            f"Needed: {shiva_needed:,.2f} more"
+        )
+        await notify_admin(admin_message)
 
 @dp.message(Command('search'))
 async def search_user(message: types.Message):
@@ -1029,6 +1287,264 @@ async def send_group_message(message: Message):
         await message.reply("Message sent successfully!")
     except Exception as e:
         await message.reply(f"Error sending message: {str(e)}")
+
+@dp.message(Command("stats"))
+async def stats_command(message: Message):
+    user_language = await get_user_language(message.from_user.id)
+    translations = TRANSLATIONS[user_language]
+    
+    # Show loading message
+    loading_msg = await message.answer(translations['stats_loading'])
+    
+    try:
+        # Get SHIVA statistics
+        total_shiva, whale_count, total_users = await get_community_shiva_stats()
+        average_shiva = total_shiva / total_users if total_users > 0 else 0
+        
+        # Get NFT royalty statistics
+        paid_royalties, unpaid_royalties, unknown_royalties = await get_community_nft_stats()
+        
+        # Format the statistics message
+        stats_message = (
+            f"{translations['stats_title']}\n\n"
+            f"{translations['stats_verified_users'].format(total_users)}\n"
+            f"{translations['stats_total_whales'].format(whale_count)}\n"
+            f"{translations['stats_total_shiva'].format(total_shiva)}\n"
+            f"{translations['stats_average_shiva'].format(average_shiva)}\n\n"
+            f"{translations['stats_nft_stats']}\n"
+            f"{translations['stats_paid_royalties'].format(paid_royalties)}\n"
+            f"{translations['stats_unpaid_royalties'].format(unpaid_royalties)}\n"
+            f"{translations['stats_unknown_royalties'].format(unknown_royalties)}"
+        )
+        
+        # Update the loading message with the stats
+        await loading_msg.edit_text(stats_message, parse_mode="Markdown")
+        
+        # Log the statistics check
+        logger.info(f"Statistics checked by user {message.from_user.username} (ID: {message.from_user.id})")
+        
+    except Exception as e:
+        logger.error(f"Error in stats command: {e}")
+        await loading_msg.edit_text(translations['stats_error'])
+
+@dp.message(Command("price"))
+async def price_command(message: Message):
+    """Show current SHIVA price information."""
+    user_language = await get_user_language(message.from_user.id)
+    translations = TRANSLATIONS[user_language]
+    
+    # Show loading message
+    loading_msg = await message.answer(translations['price_loading'])
+    
+    try:
+        # Get current price
+        price = await get_shiva_price()
+        
+        if price is not None:
+            # Format the price message
+            price_message = (
+                f"{translations['price_title']}\n\n"
+                f"{translations['price_current'].format(price)}"
+            )
+            
+            # Update the loading message with the price info
+            await loading_msg.edit_text(price_message, parse_mode="Markdown")
+        else:
+            await loading_msg.edit_text(translations['price_error'])
+            
+    except Exception as e:
+        logger.error(f"Error in price command: {e}")
+        await loading_msg.edit_text(translations['price_error'])
+
+@dp.message(Command("top"))
+async def top_command(message: Message):
+    """Show top SHIVA token holders."""
+    user_language = await get_user_language(message.from_user.id)
+    translations = TRANSLATIONS[user_language]
+    
+    # Show loading message
+    loading_msg = await message.answer(translations['top_loading'])
+    
+    try:
+        # Get top holders
+        top_holders = await get_top_holders(10)
+        
+        if top_holders:
+            # Format the top holders message
+            message_lines = [translations['top_title'], ""]
+            
+            for i, (wallet, balance) in enumerate(top_holders, 1):
+                # Show first 6 and last 4 characters of wallet address
+                shortened_wallet = f"{wallet[:6]}...{wallet[-4:]}"
+                message_lines.append(
+                    translations['top_holder_format'].format(
+                        i, wallet[:6], wallet[-4:], balance
+                    )
+                )
+            
+            # Update the loading message with the top holders info
+            await loading_msg.edit_text(
+                "\n".join(message_lines),
+                parse_mode="Markdown"
+            )
+        else:
+            await loading_msg.edit_text(translations['no_holders'])
+            
+    except Exception as e:
+        logger.error(f"Error in top command: {e}")
+        await loading_msg.edit_text(translations['top_error'])
+
+@dp.message(Command("buy"))
+async def buy_command(message: Message):
+    """Show information about buying SHIVA tokens."""
+    user_language = await get_user_language(message.from_user.id)
+    translations = TRANSLATIONS[user_language]
+    
+    # Create buy button
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=translations['buy_shiva_button'], url=SHIVA_DEX_LINK)]
+    ])
+    
+    # Format message
+    message_text = (
+        f"{translations['buy_shiva_title']}\n\n"
+        f"{translations['buy_shiva_description']}"
+    )
+    
+    await message.answer(
+        message_text,
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+
+@dp.message(Command("buy_nft"))
+async def buy_nft_command(message: Message):
+    """Show information about buying SHIVA NFTs."""
+    user_language = await get_user_language(message.from_user.id)
+    translations = TRANSLATIONS[user_language]
+    
+    # Create buy button
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=translations['buy_nft_button'], url=NFT_MARKETPLACE_LINK)]
+    ])
+    
+    # Format message
+    message_text = (
+        f"{translations['buy_nft_title']}\n\n"
+        f"{translations['buy_nft_description']}"
+    )
+    
+    await message.answer(
+        message_text,
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+
+@dp.message(Command("wallet"))
+async def wallet_command(message: Message, state: FSMContext):
+    """Direct wallet verification command."""
+    command_parts = message.text.split()
+    user_id = message.from_user.id
+    username = message.from_user.username or "Unknown"
+    
+    # Get user's language
+    user_language = await get_user_language(user_id)
+    translations = TRANSLATIONS[user_language]
+    
+    # If no wallet provided in command, wait for next message
+    if len(command_parts) == 1:
+        await state.set_state(UserState.waiting_for_wallet)
+        await message.reply(translations['enter_wallet'])
+        return
+    
+    # Get wallet from command
+    wallet_address = command_parts[1].strip()
+    
+    # Basic wallet validation
+    if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
+        await message.reply(translations['wallet_invalid'])
+        return
+    
+    try:
+        # Check NFT ownership and balance
+        has_nft = await check_nft_ownership(wallet_address)
+        _, shiva_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+        
+        # Save to database
+        await save_user_data(user_id, username, wallet_address, has_nft)
+        
+        # Notify user (simple message)
+        await message.reply(translations['wallet_saved'])
+        
+        # Notify admin (detailed message)
+        admin_message = translations['admin_wallet_verified' if has_nft else 'admin_wallet_unverified'].format(
+            username,
+            user_id,
+            wallet_address,
+            shiva_balance
+        )
+        await notify_admin(admin_message)
+        
+    except Exception as e:
+        logger.error(f"Error in wallet command: {e}")
+        await notify_admin(f"Error saving wallet for @{username} (ID: {user_id}): {str(e)}")
+
+@dp.message(UserState.waiting_for_wallet)
+async def handle_wallet_input(message: Message, state: FSMContext):
+    """Handle wallet address input after /wallet command."""
+    user_id = message.from_user.id
+    username = message.from_user.username or "Unknown"
+    wallet_address = message.text.strip()
+    
+    # Get user's language
+    user_language = await get_user_language(user_id)
+    translations = TRANSLATIONS[user_language]
+    
+    # Basic wallet validation
+    if not wallet_address.startswith('EQ') and not wallet_address.startswith('UQ'):
+        await message.reply(translations['wallet_invalid'])
+        return
+    
+    try:
+        # Check NFT ownership and balance
+        has_nft = await check_nft_ownership(wallet_address)
+        _, shiva_balance = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+        
+        # Save to database
+        await save_user_data(user_id, username, wallet_address, has_nft)
+        
+        # Clear the state
+        await state.clear()
+        
+        # Notify user (simple message)
+        await message.reply(translations['wallet_saved'])
+        
+        # Notify admin (detailed message)
+        admin_message = translations['admin_wallet_verified' if has_nft else 'admin_wallet_unverified'].format(
+            username,
+            user_id,
+            wallet_address,
+            shiva_balance
+        )
+        await notify_admin(admin_message)
+        
+    except Exception as e:
+        logger.error(f"Error processing wallet: {e}")
+        await notify_admin(f"Error saving wallet for @{username} (ID: {user_id}): {str(e)}")
+
+@dp.message(Command("help"))
+async def help_command(message: Message):
+    """Show list of available commands."""
+    user_language = await get_user_language(message.from_user.id)
+    translations = TRANSLATIONS[user_language]
+    
+    help_message = (
+        f"{translations['help_title']}\n"
+        f"{translations['help_description']}\n"
+        f"{translations['help_commands']}"
+    )
+    
+    await message.answer(help_message, parse_mode="Markdown")
 
 # Main function
 async def main():
