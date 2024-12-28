@@ -292,77 +292,6 @@ async def check_token_balance(user_address: str, jetton_master_address: str) -> 
         logger.error("Error traceback: ", exc_info=True)
         return 0, 0.0, {}
 
-async def check_nft_royalties(wallet_address: str) -> Tuple[int, int, int, List[Dict]]:
-    """
-    Check royalty payment status for NFTs in a wallet.
-    Returns: (paid_royalties, unpaid_royalties, no_transfer_info, nft_details)
-    """
-    nft_response = requests.get(
-        f"{BASE_URL}/nft/items",
-        params={
-            "owner_address": wallet_address,
-            "collection_address": NFT_COLLECTION_ADDRESS,
-            "limit": 25,
-            "offset": 0
-        },
-        headers={"accept": "application/json"}
-    )
-    
-    nft_data = nft_response.json()
-    nft_items = nft_data.get("nft_items", [])
-    
-    paid_royalties = 0
-    unpaid_royalties = 0
-    no_transfer_info = 0
-    nft_details = []
-    
-    for nft in nft_items:
-        nft_address = nft["address"]
-        nft_index = nft.get("index", "Unknown")
-        
-        transfer_response = requests.get(
-            f"{BASE_URL}/nft/transfers",
-            params={
-                "owner_address": wallet_address,
-                "item_address": nft_address,
-                "collection_address": NFT_COLLECTION_ADDRESS,
-                "direction": "in",
-                "limit": 25,
-                "offset": 0,
-                "sort": "desc"
-            },
-            headers={"accept": "application/json"}
-        )
-        
-        transfer_data = transfer_response.json()
-        transfers = transfer_data.get("nft_transfers", [])
-        
-        if transfers:
-            latest_transfer = transfers[0]
-            forward_amount = latest_transfer.get("forward_amount")
-            
-            nft_status = {
-                "index": nft_index,
-                "royalty_paid": forward_amount != "1",
-                "transfer_info": True
-            }
-            
-            if forward_amount == "1":
-                unpaid_royalties += 1
-            else:
-                paid_royalties += 1
-        else:
-            nft_status = {
-                "index": nft_index,
-                "royalty_paid": None,
-                "transfer_info": False
-            }
-            no_transfer_info += 1
-            
-        nft_details.append(nft_status)
-    
-    return paid_royalties, unpaid_royalties, no_transfer_info, nft_details
-
 async def get_shiva_price() -> Dict:
     """Get current SHIVA token price data."""
     try:
@@ -437,6 +366,40 @@ async def get_holder_name(holder_data: Dict) -> str:
         logger.error(f"Error getting holder name: {str(e)}")
         return "Anonymous"
 
+async def notify_admins_wallet_registration(user_id: int, username: str, wallet_address: str):
+    """Send detailed notification to admins about new wallet registration."""
+    try:
+        # Check NFT ownership
+        has_nft = await check_nft_ownership(wallet_address)
+        
+        # Check SHIVA balance
+        raw_balance, formatted_balance, price_data = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+        
+        # Format notification message
+        notification = (
+            "🔔 *New Wallet Registration*\n\n"
+            f"👤 User: @{username}\n"
+            f"🆔 ID: `{user_id}`\n"
+            f"👛 Wallet: `{wallet_address}`\n"
+            f"🎨 NFT Status: {'✅ Has NFT' if has_nft else '❌ No NFT'}\n"
+            f"💰 SHIVA Balance: {formatted_balance:,.2f}\n"
+            f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        )
+        
+        # Send to all admins
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    chat_id=admin_id,
+                    text=notification,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify admin {admin_id}: {str(e)}")
+                
+    except Exception as e:
+        logger.error(f"Error in admin notification: {str(e)}", exc_info=True)
+
 @dp.message(Command('start'))
 async def start_command(message: types.Message, state: FSMContext):
     """Start command handler"""
@@ -490,6 +453,9 @@ async def wallet_command(message: types.Message, state: FSMContext):
     # Direct save for /wallet command
     await save_user_data(user_id, username, wallet_address, False)
     await message.answer("✅ Wallet saved successfully!")
+    
+    # Notify admins about the new wallet registration
+    await notify_admins_wallet_registration(user_id, username, wallet_address)
 
 @dp.message(UserState.waiting_for_wallet)
 async def handle_wallet_input(message: types.Message, state: FSMContext):
