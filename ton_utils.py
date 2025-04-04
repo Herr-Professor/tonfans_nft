@@ -101,7 +101,7 @@ async def check_token_balance(user_address: str, jetton_master_address: str) -> 
     headers = {"Authorization": f"Bearer {TONAPI_KEY}"}
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, timeout=10) as response:
+            async with session.get(url, headers=headers, timeout=25) as response:
                 if response.status == 404: # Wallet might not hold this specific jetton
                     logger.info(f"Jetton {jetton_master_address} not found for address {user_address}. Assuming 0 balance.")
                     return 0, 0.0, {}

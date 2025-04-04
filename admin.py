@@ -219,11 +219,11 @@ class AdminCommands:
                     # Escape all dynamic content
                     safe_username = escape_md(whale['username']) if whale['username'] else "Anonymous"
                     safe_balance = escape_md(f"{whale['balance']:,.2f}")
-                    response.append(f"{i}\\. {safe_username} \\- {safe_balance} $SHIVA")
+                    response.append(f"{i}\\. @{safe_username} \\- {safe_balance} $SHIVA")
             else:
                 response.append("❌ No whales found")
     
-            await msg.edit_text("\n".join(response), parse_mode="MarkdownV2")
+            await msg.edit_text("\n".join(response), parse_mode="Markdown")
     
         except Exception as e:
             logger.error(f"Critical error in list_whales: {str(e)}")
