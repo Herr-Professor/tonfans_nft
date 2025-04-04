@@ -569,6 +569,22 @@ async def whale_command(message: Message):
     balance_message = escape_md(f"Your $SHIVA balance: {formatted_balance:,.2f}")
     await message.reply(balance_message)
     
+    whale_notification = (
+        f" Whale Status checked by @{username} (ID: {user_id})\n"
+        f" Balance: {formatted_balance:,.2f} $SHIVA\n"
+        f" Wallet: {wallet_address}"
+    )
+    
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                chat_id=admin_id,
+                text=whale_notification,
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify admin {admin_id}: {str(e)}")
+    
     if formatted_balance >= 10_000_000:  # 10M SHIVA threshold
         await message.reply(MESSAGES['whale_verification_success'])
     else:
