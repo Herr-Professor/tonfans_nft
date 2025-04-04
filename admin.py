@@ -11,7 +11,7 @@ import sqlite3
 import asyncio
 import logging
 import aiosqlite
-from ton_utils import check_token_balance, check_nft_ownership, SHIVA_TOKEN_ADDRESS
+from ton_utils import check_token_balance, check_nft_ownership, escape_md, SHIVA_TOKEN_ADDRESS
 
 # Configure logging
 logging.basicConfig(
@@ -47,11 +47,6 @@ MESSAGES = {
 /admin - Show this help message"""
 }
 
-def escape_md(text: str) -> str:
-    """Custom Markdown V2 escaper"""
-    escape_chars = '_*[]()~`>#+-=|{}.!'
-    return ''.join(['\\' + char if char in escape_chars else char for char in text])
-
 class AdminCommands:
     def __init__(self, bot: Bot):
         self.bot = bot
@@ -68,7 +63,7 @@ class AdminCommands:
             try:
                 await self.bot.send_message(
                     chat_id=admin_id,
-                    text=message,
+                    text=escape_md(message),
                     parse_mode="Markdown"
                 )
             except Exception as e:
@@ -104,7 +99,7 @@ class AdminCommands:
             
             report = (
                 f"👤 *User Information*\n\n"
-                f"*Username:* @{username}\n"
+                f"*Username:* @{escape_md(username)}\n"
                 f"*User ID:* `{user_id}`\n"
                 f"*Wallet:* `{wallet_address}`\n"
                 f"*Has NFT:* {'✅' if has_nft else '❌'}\n"
@@ -219,14 +214,16 @@ class AdminCommands:
             
             if whales_found:
                 whales_found.sort(key=lambda x: x['balance'], reverse=True)
-                response.append(f"🐳 Top Whales (≥{WHALE_THRESHOLD:,.0f} $SHIVA):")
+                response.append(f"🐳 *Top Whales* (≥{WHALE_THRESHOLD:,.0f} $SHIVA):")
                 for i, whale in enumerate(whales_found, 1):
-                    name = f"@{whale['username']}" if whale['username'] else f"User {whale['user_id']}"
-                    response.append(f"{i}. {name} - {whale['balance']:,.2f} $SHIVA")
+                    # Escape all dynamic content
+                    safe_username = escape_md(whale['username']) if whale['username'] else "Anonymous"
+                    safe_balance = escape_md(f"{whale['balance']:,.2f}")
+                    response.append(f"{i}\\. {safe_username} \\- {safe_balance} $SHIVA")
             else:
                 response.append("❌ No whales found")
     
-            await msg.edit_text("\n".join(response), parse_mode="Markdown")
+            await msg.edit_text("\n".join(response), parse_mode="MarkdownV2")
     
         except Exception as e:
             logger.error(f"Critical error in list_whales: {str(e)}")

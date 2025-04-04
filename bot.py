@@ -22,6 +22,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 import sqlite3
 import logging
+from ton_utils import escape_md
 from admin import AdminCommands, register_admin_handlers
 
 # At the top of the file
@@ -378,7 +379,7 @@ async def notify_admins_wallet_registration(user_id: int, username: str, wallet_
         # Format notification message
         notification = (
             "🔔 *New Wallet Registration*\n\n"
-            f"👤 User: @{username}\n"
+            f"👤 User: @{escape_md(username)}\n"
             f"🆔 ID: `{user_id}`\n"
             f"👛 Wallet: `{wallet_address}`\n"
             f"🎨 NFT Status: {'✅ Has NFT' if has_nft else '❌ No NFT'}\n"
@@ -419,7 +420,7 @@ async def start_command(message: types.Message, state: FSMContext):
         with open(WELCOME_IMAGE_PATH, 'rb') as photo:
             await message.answer_photo(
                 FSInputFile(WELCOME_IMAGE_PATH),
-                caption=f"👋 This is Boris.\nWelcome {message.from_user.first_name}!\n\nI'm tonfans NFT checker bot. I'll help you verify your NFT ownership and get access to our exclusive group.\n\nPlease send me your TON wallet address to begin verification.",
+                caption=f"👋 This is Boris.\nWelcome {escape_md(message.from_user.first_name)}!\n\n...I'm tonfans NFT checker bot. I'll help you verify your NFT ownership and get access to our exclusive group.\n\nPlease send me your TON wallet address to begin verification.",
                 parse_mode="Markdown"
             )
     except Exception as e:
@@ -565,7 +566,7 @@ async def whale_command(message: Message):
     raw_balance, formatted_balance, _ = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
     
     # Show current balance regardless of whale status
-    balance_message = f"Your $SHIVA balance: {formatted_balance:,.2f}"
+    balance_message = escape_md(f"Your $SHIVA balance: {formatted_balance:,.2f}")
     await message.reply(balance_message)
     
     if formatted_balance >= 10_000_000:  # 10M SHIVA threshold

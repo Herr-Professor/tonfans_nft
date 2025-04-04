@@ -15,6 +15,11 @@ TONAPI_KEY = "AHZNMH2YZTTI2NIAAAACRWPE4TMJORYEHELN4ADWSJYBYH475H4AN4FYZUNVNZV4JM
 SHIVA_TOKEN_ADDRESS = "EQAQAYqUr9IDiiMQKvXXHtLhT77WvbhH7VGhvPPJmBVF3O7y"
 VERIFICATION_WALLET = "UQA53kg3IzUo2PTuaZxXB3qK7fICyc1u_Yu8d0JDYJRPVWpz" # For wallet verification tx check
 
+def escape_md(text: str) -> str:
+    """MarkdownV2 escaper"""
+    escape_chars = '_*[]()~`>#+-=|{}.!-'
+    return ''.join(['\\' + char if char in escape_chars else char for char in str(text)])
+
 async def check_nft_ownership(wallet_address: str) -> bool:
     """Checks if a wallet holds an NFT from the specified collection."""
     url = f'https://tonapi.io/v2/accounts/{wallet_address}/nfts?collection={NFT_COLLECTION_ADDRESS}&limit=1000&offset=0&indirect_ownership=false'
