@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 import sqlite3
 import asyncio
 import logging
-from ton_utils import check_token_balance, SHIVA_TOKEN_ADDRESS
+import aiosqlite
+from ton_utils import check_token_balance, check_nft_ownership, SHIVA_TOKEN_ADDRESS
 
 # Configure logging
 logging.basicConfig(
@@ -45,6 +46,11 @@ MESSAGES = {
 /stats - Show bot statistics
 /admin - Show this help message"""
 }
+
+def escape_md(text: str) -> str:
+    """Custom Markdown V2 escaper"""
+    escape_chars = '_*[]()~`>#+-=|{}.!'
+    return ''.join(['\\' + char if char in escape_chars else char for char in text])
 
 class AdminCommands:
     def __init__(self, bot: Bot):
@@ -148,120 +154,84 @@ class AdminCommands:
         """Lists users who qualify as whales based on SHIVA balance."""
         if not await self.is_admin(message.from_user.id):
             return
-
-        # --- Check if required function/constant was imported correctly ---
-        local_check_token_balance = None
-        local_shiva_token_address = None
+    
         try:
-            from bot import check_token_balance as ctb, SHIVA_TOKEN_ADDRESS as sta
-            local_check_token_balance = ctb
-            local_shiva_token_address = sta
-            if not local_shiva_token_address or not callable(local_check_token_balance):
-                 raise ImportError("Required components not loaded correctly.")
-            logger.info("Using check_token_balance/SHIVA_TOKEN_ADDRESS from bot.py.")
+            from ton_utils import check_token_balance, SHIVA_TOKEN_ADDRESS
         except ImportError as e:
-            await message.reply(f"❌ Critical error: Cannot access balance checking components ({e}). Please check bot logs.")
-            logger.error(f"list_whales: Failed to load check_token_balance or SHIVA_TOKEN_ADDRESS. Error: {e}")
+            await message.reply(f"❌ Critical error: {str(e)}")
+            logger.error(f"Failed to import dependencies: {e}")
             return
-        # --- End Check ---
-
+    
         msg = await message.reply(f"🔍 Fetching whale list (>= {WHALE_THRESHOLD:,.0f} $SHIVA). This may take some time...")
-
-        conn = sqlite3.connect('members.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT user_id, username, wallet_address FROM members WHERE wallet_address IS NOT NULL AND wallet_address != ""')
-        potential_whales = cursor.fetchall()
-        conn.close()
-
-        if not potential_whales:
-            await msg.edit_text("❌ No users with registered wallets found in the database.")
-            return
-
-        whales_found = []
-        checked_count = 0
-        total_to_check = len(potential_whales)
-        # Use timezone.utc for aware datetime
-        start_time = datetime.now(timezone.utc) # Get start time as aware
-        last_edit_time = start_time
-
-        for user_id, username, wallet_address in potential_whales:
-            checked_count += 1
-            if not isinstance(wallet_address, str) or not (wallet_address.startswith('EQ') or wallet_address.startswith('UQ')):
-                logger.warning(f"Skipping invalid wallet format for user {user_id} ('{wallet_address}') during whale check.")
-                continue
-
-            logger.debug(f"Checking whale status for @{username or user_id} ({wallet_address})...")
-            try:
-                raw_balance, formatted_balance, _ = await local_check_token_balance(wallet_address, local_shiva_token_address)
-
-                if formatted_balance >= WHALE_THRESHOLD:
-                    whales_found.append({
-                        'user_id': user_id,
-                        'username': username,
-                        'wallet': wallet_address,
-                        'balance': formatted_balance
-                    })
-                    logger.info(f"Whale found: @{username or user_id} ({formatted_balance:,.2f} SHIVA)")
-
-                # --- Progress Update Logic ---
-                # Use timezone.utc for aware datetime
-                now = datetime.now(timezone.utc)
-                if checked_count % 25 == 0 or (now - last_edit_time).total_seconds() > 5:
-                     # Use the aware start_time for total elapsed calculation
-                    elapsed = (now - start_time).total_seconds()
-                    progress_text = (
-                        f"🔍 Checked {checked_count}/{total_to_check} users...\n"
-                        f"{len(whales_found)} whales found so far.\n"
-                        f"({elapsed:.1f}s elapsed)"
-                    )
-                    try:
-                        if (now - last_edit_time).total_seconds() > 1.5:
-                             await msg.edit_text(progress_text)
-                             last_edit_time = now # Update last edit time
-                    except Exception as edit_err:
-                        logger.warning(f"Could not edit progress message: {edit_err}")
-                # --- End Progress Update ---
-
-                await asyncio.sleep(0.25)
-
-            except Exception as e:
-                logger.error(f"Error checking balance for {wallet_address} (@{username or user_id}): {e}")
-                await asyncio.sleep(0.5)
-
-        # Final results processing
-        # Use timezone.utc for aware datetime
-        # The original error occurred here:
-        final_now = datetime.now(timezone.utc)
-        # msg.date is already aware (from Telegram)
-        duration = (final_now - msg.date).total_seconds() # Now subtracting aware from aware
-        final_message = f"✅ Finished checking {total_to_check} users in {duration:.2f} seconds.\n\n"
-
-        if not whales_found:
-            final_message += f"❌ No users found holding {WHALE_THRESHOLD:,.0f} $SHIVA or more."
-            await msg.edit_text(final_message)
-            return
-
-        whales_found.sort(key=lambda x: x['balance'], reverse=True)
-
-        response_lines = [f"🐳 *Whale List* ({len(whales_found)} found, >= {WHALE_THRESHOLD:,.0f} $SHIVA)\n"]
-        for i, whale in enumerate(whales_found, 1):
-            display_name = f"@{whale['username']}" if whale['username'] else f"User ID: `{whale['user_id']}`"
-            response_lines.append(f"{i}. {display_name} - **{whale['balance']:,.2f}** $SHIVA\n  `{whale['wallet']}`")
-
-        full_response = "\n".join(response_lines)
-
-        if len(final_message) + len(full_response) > 4096:
-             allowed_list_len = 4096 - len(final_message) - 50
-             truncated_list = full_response[:allowed_list_len]
-             last_newline = truncated_list.rfind('\n')
-             if last_newline > 0:
-                  truncated_list = truncated_list[:last_newline]
-             final_message += "⚠️ Whale list is too long. Showing top portion:\n\n" + truncated_list + "\n..."
-             await msg.edit_text(final_message, parse_mode="Markdown")
-        else:
-             final_message += full_response
-             await msg.edit_text(final_message, parse_mode="Markdown")
-
+    
+        try:
+            # Async database connection
+            async with aiosqlite.connect('members.db') as conn:
+                cursor = await conn.execute(
+                    'SELECT user_id, username, wallet_address FROM members '
+                    'WHERE wallet_address IS NOT NULL AND wallet_address != ""'
+                )
+                potential_whales = await cursor.fetchall()
+    
+            if not potential_whales:
+                await msg.edit_text("❌ No users with registered wallets found.")
+                return
+    
+            whales_found = []
+            total = len(potential_whales)
+            start_time = datetime.now(timezone.utc)
+            
+            for index, (user_id, username, wallet) in enumerate(potential_whales, 1):
+                try:
+                    # Validate wallet format
+                    if not isinstance(wallet, str) or not wallet.startswith(('EQ', 'UQ')):
+                        continue
+    
+                    # Check balance with error handling
+                    raw_balance, formatted_balance, _ = await check_token_balance(wallet, SHIVA_TOKEN_ADDRESS)
+                    
+                    if formatted_balance >= WHALE_THRESHOLD:
+                        whales_found.append({
+                            'user_id': user_id,
+                            'username': username,
+                            'wallet': wallet,
+                            'balance': formatted_balance
+                        })
+    
+                    # Update progress every 5 users or 3 seconds
+                    if index % 5 == 0 or (datetime.now(timezone.utc) - start_time).seconds % 3 == 0:
+                        progress = (
+                            f"🔍 Checked {index}/{total} users\n"
+                            f"🐳 Found: {len(whales_found)}\n"
+                            f"⏱ {(datetime.now(timezone.utc) - start_time).seconds}s"
+                        )
+                        await msg.edit_text(progress)
+                        
+                    await asyncio.sleep(1)  # Increased delay for API limits
+    
+                except Exception as e:
+                    logger.error(f"Error checking {wallet}: {str(e)}")
+                    continue
+    
+            # Compile final results
+            duration = (datetime.now(timezone.utc) - start_time).seconds
+            response = [f"✅ Checked {total} users in {duration}s"]
+            
+            if whales_found:
+                whales_found.sort(key=lambda x: x['balance'], reverse=True)
+                response.append(f"🐳 Top Whales (≥{WHALE_THRESHOLD:,.0f} $SHIVA):")
+                for i, whale in enumerate(whales_found, 1):
+                    name = f"@{whale['username']}" if whale['username'] else f"User {whale['user_id']}"
+                    response.append(f"{i}. {name} - {whale['balance']:,.2f} $SHIVA")
+            else:
+                response.append("❌ No whales found")
+    
+            await msg.edit_text("\n".join(response), parse_mode="Markdown")
+    
+        except Exception as e:
+            logger.error(f"Critical error in list_whales: {str(e)}")
+            await message.reply(f"❌ Failed to list whales: {str(e)}")
+    
     async def add_members(self, message: Message):
         """Add new members manually."""
         if not await self.is_admin(message.from_user.id):
@@ -346,51 +316,179 @@ class AdminCommands:
         await message.answer('\n'.join(response))
 
     async def list_nft_holders(self, message: Message):
-        """List all NFT holders."""
+        """List all NFT holders with proper Markdown escaping"""
         if not await self.is_admin(message.from_user.id):
             return
-
-        conn = sqlite3.connect('members.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT username, wallet_address FROM members WHERE has_nft = 1')
-        holders = cursor.fetchall()
-        conn.close()
-
-        if not holders:
-            await message.reply("❌ No NFT holders found in database!")
-            return
-
-        response = "💎 *Current NFT Holders:*\n\n"
-        for username, wallet in holders:
-            response += f"• @{username}\n  `{wallet}`\n\n"
-
-        await message.reply(response, parse_mode="Markdown")
-
+    
+        try:
+            async with aiosqlite.connect('members.db') as conn:
+                cursor = await conn.execute(
+                    'SELECT username, wallet_address FROM members WHERE has_nft = 1'
+                )
+                holders = await cursor.fetchall()
+    
+            if not holders:
+                await message.reply("❌ No NFT holders found!")
+                return
+    
+            response = ["💎 *NFT Holders:*"]
+            for username, wallet in holders:
+                # Escape special characters using our custom function
+                safe_username = escape_md(username or "NoUsername")
+                safe_wallet = escape_md(wallet)
+                response.append(f"• @{safe_username}\n  `{safe_wallet}`")
+    
+            # Split long messages into multiple parts
+            full_text = "\n\n".join(response)
+            if len(full_text) > 4000:
+                parts = []
+                current_part = []
+                current_length = 0
+                
+                for line in response:
+                    line_length = len(line)
+                    if current_length + line_length > 4000:
+                        parts.append("\n\n".join(current_part))
+                        current_part = []
+                        current_length = 0
+                    current_part.append(line)
+                    current_length += line_length + 2  # +2 for newlines
+                
+                if current_part:
+                    parts.append("\n\n".join(current_part))
+    
+                for part in parts:
+                    try:
+                        await message.reply(part, parse_mode="Markdown")
+                        await asyncio.sleep(1)  # Avoid rate limits
+                    except Exception as e:
+                        logger.error(f"Error sending message part: {str(e)}")
+            else:
+                await message.reply(full_text, parse_mode="Markdown")
+    
+        except Exception as e:
+            error_msg = escape_md(f"Error: {str(e)}")
+            await message.reply(f"❌ {error_msg}", parse_mode="Markdown")
+        
     async def check_to_kick(self, message: Message):
-        """List users without NFTs."""
+        """List users without NFTs"""
+        if not await self.is_admin(message.from_user.id):
+            return
+    
+        try:
+            async with aiosqlite.connect('members.db') as conn:
+                cursor = await conn.execute(
+                    'SELECT username, wallet_address, user_id FROM members WHERE has_nft = 0'
+                )
+                non_holders = await cursor.fetchall()
+    
+            if not non_holders:
+                await message.reply("✅ All users have NFTs!")
+                return
+    
+            response = ["🚫 *Non-NFT Holders:*"]
+            for username, wallet, uid in non_holders:
+                # Use custom escape function
+                safe_username = escape_md(username or "NoUsername")
+                safe_wallet = escape_md(wallet)
+                safe_uid = escape_md(str(uid))
+                
+                response.append(
+                    f"• @{safe_username}\n"
+                    f"  ID: `{safe_uid}`\n"
+                    f"  Wallet: `{safe_wallet}`"
+                )
+    
+            # Split long messages
+            full_text = "\n\n".join(response)
+            if len(full_text) > 4000:
+                parts = [full_text[i:i+4000] for i in range(0, len(full_text), 4000)]
+                for part in parts:
+                    await message.reply(part, parse_mode="Markdown")
+                    await asyncio.sleep(1)
+            else:
+                await message.reply(full_text, parse_mode="Markdown")
+    
+        except Exception as e:
+            error_msg = escape_md(f"Error: {str(e)}")
+            await message.reply(f"❌ {error_msg}", parse_mode="Markdown")
+                
+    async def update_nft_status(self, message: Message):
+        """Update NFT status for all users in database"""
         if not await self.is_admin(message.from_user.id):
             return
 
-        conn = sqlite3.connect('members.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT username, wallet_address, user_id FROM members WHERE has_nft = 0')
-        non_holders = cursor.fetchall()
-        conn.close()
-
-        if not non_holders:
-            await message.reply("✅ All users currently hold NFTs!")
-            return
-
-        response = "🚫 *Users without NFTs:*\n\n"
-        for username, wallet, user_id in non_holders:
-            response += f"• @{username}\n  ID: `{user_id}`\n  Wallet: `{wallet}`\n\n"
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚫 Kick All Listed Users", callback_data="kick_all_non_holders")]
-        ])
-
-        await message.reply(response, parse_mode="Markdown", reply_markup=keyboard)
-
+        msg = await message.reply("🔄 Starting NFT status update...")
+        
+        try:
+            async with aiosqlite.connect('members.db') as conn:
+                # Get all users with wallets
+                cursor = await conn.execute(
+                    'SELECT user_id, wallet_address FROM members '
+                    'WHERE wallet_address IS NOT NULL AND wallet_address != ""'
+                )
+                users = await cursor.fetchall()
+                total_users = len(users)
+                
+                if not total_users:
+                    await msg.edit_text("❌ No users with wallets in database")
+                    return
+    
+                updated_count = 0
+                errors = []
+                start_time = datetime.now(timezone.utc)
+                
+                for index, (user_id, wallet) in enumerate(users, 1):
+                    try:
+                        # Check NFT status
+                        has_nft = await check_nft_ownership(wallet)
+                        
+                        # Update database
+                        await conn.execute(
+                            'UPDATE members SET has_nft = ?, last_checked = CURRENT_TIMESTAMP '
+                            'WHERE user_id = ?',
+                            (1 if has_nft else 0, user_id)
+                        )
+                        await conn.commit()
+                        
+                        updated_count += 1
+                        
+                        # Update progress every 5 users or 10 seconds
+                        if index % 5 == 0 or (datetime.now(timezone.utc) - start_time).seconds % 10 == 0:
+                            progress = (
+                                f"🔄 Processed {index}/{total_users} users\n"
+                                f"✅ Updated: {updated_count}\n"
+                                f"⏱ Elapsed: {(datetime.now(timezone.utc) - start_time).seconds}s"
+                            )
+                            await msg.edit_text(progress)
+                        
+                        await asyncio.sleep(1)  # Rate limiting
+                        
+                    except Exception as e:
+                        errors.append(f"User {user_id}: {str(e)}")
+                        continue
+    
+                # Final report
+                duration = (datetime.now(timezone.utc) - start_time).seconds
+                report = (
+                    f"✅ Update complete!\n"
+                    f"• Total users: {total_users}\n"
+                    f"• Successfully updated: {updated_count}\n"
+                    f"• Errors: {len(errors)}\n"
+                    f"• Time taken: {duration}s"
+                )
+                
+                if errors:
+                    report += "\n\n❌ Errors:\n" + "\n".join(errors[:5])  # Show first 5 errors
+                    if len(errors) > 5:
+                        report += f"\n...and {len(errors)-5} more errors"
+                
+                await msg.edit_text(report)
+    
+        except Exception as e:
+            logger.error(f"Critical error in update: {str(e)}")
+            await message.reply(f"❌ Update failed: {escape_md(str(e))}", parse_mode="Markdown")
+            
     async def send_group_message(self, message: Message):
         """Send a message to the group."""
         if not await self.is_admin(message.from_user.id):
@@ -492,6 +590,7 @@ def register_admin_handlers(dp: Dispatcher, admin_commands: AdminCommands):
     dp.message.register(admin_commands.kick_member, Command('kick'))
     dp.message.register(admin_commands.add_members, Command('add'))
     dp.message.register(admin_commands.list_nft_holders, Command('mem'))
+    dp.message.register(admin_commands.update_nft_status, Command('update'))
     dp.message.register(admin_commands.check_to_kick, Command('to_kick'))
     dp.message.register(admin_commands.list_whales, Command('list_whales')) # <-- ADD THIS LINE
     dp.message.register(admin_commands.send_group_message, Command('sendMessage'))
