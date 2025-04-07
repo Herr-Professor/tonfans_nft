@@ -727,14 +727,27 @@ async def start_http_server():
     logger.info("HTTP server started on port 8000")
 
 async def send_active_ping(bot_instance: Bot):
-    """Sends a ping message every 60 seconds to keep the bot active."""
+    """Sends a ping message every 30 seconds to keep the bot active."""
     while True:
-        await asyncio.sleep(60) # Wait for 60 seconds
         try:
+            # Send ping to admin
             await bot_instance.send_message(PING_ADMIN_ID, "I am active")
             logger.info("Sent 'I am active' ping.")
+            
+            # Perform a health check on the database
+            async with aiosqlite.connect('members.db') as conn:
+                cursor = await conn.cursor()
+                await cursor.execute('SELECT COUNT(*) FROM members')
+                count = await cursor.fetchone()
+                logger.info(f"Database health check: {count[0]} members in database")
+            
+            # Wait for 30 seconds before next ping
+            await asyncio.sleep(30)
+            
         except Exception as e:
             logger.error(f"Failed to send 'I am active' ping: {e}")
+            # If there's an error, wait a shorter time before retrying
+            await asyncio.sleep(5)
 
 async def main():
     print("Starting NFT Checker Bot...")
