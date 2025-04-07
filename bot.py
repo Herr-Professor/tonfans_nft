@@ -569,10 +569,14 @@ async def whale_command(message: Message):
     balance_message = escape_md(f"Your $SHIVA balance: {formatted_balance:,.2f}")
     await message.reply(balance_message)
     
+    # Escape username and wallet address for Markdown
+    safe_username = escape_md(username)
+    safe_wallet = escape_md(wallet_address)
+    
     whale_notification = (
-        f" Whale Status checked by @{username} (ID: {user_id})\n"
+        f" Whale Status checked by @{safe_username} (ID: `{user_id}`)\n" # Also ensure user_id is code-formatted
         f" Balance: {formatted_balance:,.2f} $SHIVA\n"
-        f" Wallet: {wallet_address}"
+        f" Wallet: `{safe_wallet}`" # Code-format the wallet address
     )
     
     for admin_id in ADMIN_IDS:
