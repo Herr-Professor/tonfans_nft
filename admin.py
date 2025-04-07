@@ -7,7 +7,6 @@ from aiogram.types import (
 )
 from aiogram.filters import Command
 from datetime import datetime, timezone
-import sqlite3
 import asyncio
 import logging
 import aiosqlite
@@ -81,7 +80,7 @@ class AdminCommands:
 
         search_username = args[1].replace('@', '')
         
-        conn = sqlite3.connect('members.db')
+        conn = aiosqlite.connect('members.db')
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM members WHERE username LIKE ?', (f"%{search_username}%",))
         results = cursor.fetchall()
@@ -124,7 +123,7 @@ class AdminCommands:
             await self.bot.ban_chat_member(GROUP_ID, user_id)
             
             # Then remove from database
-            conn = sqlite3.connect('members.db')
+            conn = aiosqlite.connect('members.db')
             cursor = conn.cursor()
             cursor.execute('DELETE FROM members WHERE user_id = ?', (user_id,))
             rows_affected = cursor.rowcount
@@ -280,7 +279,7 @@ class AdminCommands:
         if current_member and len(current_member) == 3:
             members_to_add.append(current_member)
 
-        conn = sqlite3.connect('members.db')
+        conn = aiosqlite.connect('members.db')
         cursor = conn.cursor()
         
         for member in members_to_add:
@@ -516,7 +515,7 @@ class AdminCommands:
             await message.reply("❌ Please provide a message to broadcast")
             return
 
-        conn = sqlite3.connect('members.db')
+        conn = aiosqlite.connect('members.db')
         cursor = conn.cursor()
         cursor.execute('SELECT user_id FROM members')
         users = cursor.fetchall()
@@ -544,7 +543,7 @@ class AdminCommands:
         if not await self.is_admin(message.from_user.id):
             return
 
-        conn = sqlite3.connect('members.db')
+        conn = aiosqlite.connect('members.db')
         cursor = conn.cursor()
         
         # Get total users

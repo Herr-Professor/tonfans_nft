@@ -20,7 +20,7 @@ from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
-import sqlite3
+import aiosqlite
 import logging
 from ton_utils import escape_md
 from admin import AdminCommands, register_admin_handlers
@@ -161,7 +161,7 @@ class UserState(StatesGroup):
 
 # Remove language-related fields from database
 def setup_database():
-    conn = sqlite3.connect('members.db')
+    conn = aiosqlite.connect('members.db')
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS members (
@@ -177,7 +177,7 @@ def setup_database():
     conn.close()
 
 async def get_user_data(user_id: int):
-    conn = sqlite3.connect('members.db')
+    conn = aiosqlite.connect('members.db')
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM members WHERE user_id = ?', (user_id,))
     result = cursor.fetchone()
@@ -185,7 +185,7 @@ async def get_user_data(user_id: int):
     return result
 
 async def get_user_by_wallet(wallet_address: str):
-    conn = sqlite3.connect('members.db')
+    conn = aiosqlite.connect('members.db')
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM members WHERE wallet_address = ?', (wallet_address,))
     result = cursor.fetchone()
@@ -193,7 +193,7 @@ async def get_user_by_wallet(wallet_address: str):
     return result
 
 async def save_user_data(user_id: int, username: str, wallet_address: str, has_nft: bool, verification_memo: str = None):
-    conn = sqlite3.connect('members.db')
+    conn = aiosqlite.connect('members.db')
     cursor = conn.cursor()
     cursor.execute('''
         INSERT OR REPLACE INTO members 
@@ -353,7 +353,7 @@ async def get_holder_name(holder_data: Dict) -> str:
             
         # Then check our database for the address
         if owner_address:
-            conn = sqlite3.connect('members.db')
+            conn = aiosqlite.connect('members.db')
             cursor = conn.cursor()
             cursor.execute('SELECT username FROM members WHERE wallet_address = ?', (owner_address,))
             result = cursor.fetchone()
