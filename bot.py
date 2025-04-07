@@ -24,6 +24,7 @@ import aiosqlite
 import logging
 from ton_utils import escape_md
 from admin import AdminCommands, register_admin_handlers
+from aiohttp import web
 
 # At the top of the file
 logging.basicConfig(
@@ -713,12 +714,26 @@ async def help_command(message: Message):
         parse_mode="Markdown"
     )
 
-# Main function
+async def health_check(request):
+    return web.Response(text="OK")
+
+async def start_http_server():
+    app = web.Application()
+    app.router.add_get('/health', health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 8000)
+    await site.start()
+    logger.info("HTTP server started on port 8000")
+
 async def main():
     print("Starting NFT Checker Bot...")
     await setup_database()
     
     try:
+        # Start HTTP server for health checks
+        await start_http_server()
+        
         # Initialize admin commands
         admin_commands = AdminCommands(bot)
         register_admin_handlers(dp, admin_commands)
