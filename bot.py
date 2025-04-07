@@ -48,6 +48,9 @@ TONAPI_KEY = "AHZNMH2YZTTI2NIAAAACRWPE4TMJORYEHELN4ADWSJYBYH475H4AN4FYZUNVNZV4JM
 SHIVA_TOKEN_ADDRESS = "EQAQAYqUr9IDiiMQKvXXHtLhT77WvbhH7VGhvPPJmBVF3O7y"
 SHIVA_DEX_LINK = "https://dedust.io/trade/SHIVA-TON"
 
+# Admin ID for ping
+PING_ADMIN_ID = 1499577590
+
 # Initialize bot and dispatcher
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
@@ -726,9 +729,22 @@ async def start_http_server():
     await site.start()
     logger.info("HTTP server started on port 8000")
 
+async def send_active_ping(bot_instance: Bot):
+    """Sends a ping message every 60 seconds to keep the bot active."""
+    while True:
+        await asyncio.sleep(60) # Wait for 60 seconds
+        try:
+            await bot_instance.send_message(PING_ADMIN_ID, "I am active")
+            logger.info("Sent 'I am active' ping.")
+        except Exception as e:
+            logger.error(f"Failed to send 'I am active' ping: {e}")
+
 async def main():
     print("Starting NFT Checker Bot...")
     await setup_database()
+    
+    # Create the background task for sending pings
+    ping_task = asyncio.create_task(send_active_ping(bot))
     
     try:
         # Start HTTP server for health checks
@@ -740,10 +756,19 @@ async def main():
         
         # Start polling
         await dp.start_polling(bot)
+        
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Main loop error: {e}")
     finally:
+        # Optionally cancel the ping task on shutdown
+        ping_task.cancel()
+        try:
+            await ping_task
+        except asyncio.CancelledError:
+            logger.info("Ping task cancelled.")
+            
         await bot.session.close()
+        logger.info("Bot session closed.")
 
 if __name__ == '__main__':
     asyncio.run(main())

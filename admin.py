@@ -515,18 +515,18 @@ class AdminCommands:
             await message.reply("❌ Please provide a message to broadcast")
             return
 
-        conn = aiosqlite.connect('members.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT user_id FROM members')
-        users = cursor.fetchall()
-        conn.close()
+        users = []
+        async with aiosqlite.connect('members.db') as conn:
+            cursor = await conn.cursor()
+            await cursor.execute('SELECT user_id FROM members')
+            users = await cursor.fetchall()
 
         success = 0
         failed = 0
 
-        for user_id in users:
+        for user_id_tuple in users:
             try:
-                await self.bot.send_message(user_id[0], content)
+                await self.bot.send_message(user_id_tuple[0], content)
                 success += 1
             except Exception:
                 failed += 1
@@ -543,22 +543,27 @@ class AdminCommands:
         if not await self.is_admin(message.from_user.id):
             return
 
-        conn = aiosqlite.connect('members.db')
-        cursor = conn.cursor()
-        
-        # Get total users
-        cursor.execute('SELECT COUNT(*) FROM members')
-        total_users = cursor.fetchone()[0]
-        
-        # Get NFT holders
-        cursor.execute('SELECT COUNT(*) FROM members WHERE has_nft = 1')
-        nft_holders = cursor.fetchone()[0]
-        
-        # Get users with wallets
-        cursor.execute('SELECT COUNT(*) FROM members WHERE wallet_address IS NOT NULL')
-        users_with_wallet = cursor.fetchone()[0]
-        
-        conn.close()
+        total_users = 0
+        nft_holders = 0
+        users_with_wallet = 0
+
+        async with aiosqlite.connect('members.db') as conn:
+            cursor = await conn.cursor()
+            
+            # Get total users
+            await cursor.execute('SELECT COUNT(*) FROM members')
+            total_users_result = await cursor.fetchone()
+            total_users = total_users_result[0] if total_users_result else 0
+            
+            # Get NFT holders
+            await cursor.execute('SELECT COUNT(*) FROM members WHERE has_nft = 1')
+            nft_holders_result = await cursor.fetchone()
+            nft_holders = nft_holders_result[0] if nft_holders_result else 0
+            
+            # Get users with wallets
+            await cursor.execute('SELECT COUNT(*) FROM members WHERE wallet_address IS NOT NULL')
+            users_with_wallet_result = await cursor.fetchone()
+            users_with_wallet = users_with_wallet_result[0] if users_with_wallet_result else 0
 
         stats = f"""📊 *Bot Statistics*
 
@@ -588,7 +593,7 @@ def register_admin_handlers(dp: Dispatcher, admin_commands: AdminCommands):
     dp.message.register(admin_commands.list_nft_holders, Command('mem'))
     dp.message.register(admin_commands.update_nft_status, Command('update'))
     dp.message.register(admin_commands.check_to_kick, Command('to_kick'))
-    dp.message.register(admin_commands.list_whales, Command('list_whales')) # <-- ADD THIS LINE
+    dp.message.register(admin_commands.list_whales, Command('list_whales'))
     dp.message.register(admin_commands.send_group_message, Command('sendMessage'))
     dp.message.register(admin_commands.broadcast_message, Command('broadcast'))
     dp.message.register(admin_commands.show_stats, Command('stats'))
