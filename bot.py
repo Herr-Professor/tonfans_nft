@@ -180,31 +180,28 @@ async def setup_database():
         await conn.commit()
 
 async def get_user_data(user_id: int):
-    conn = aiosqlite.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM members WHERE user_id = ?', (user_id,))
-    result = cursor.fetchone()
-    conn.close()
-    return result
+    async with aiosqlite.connect('members.db') as conn:
+        cursor = await conn.cursor()
+        await cursor.execute('SELECT * FROM members WHERE user_id = ?', (user_id,))
+        result = await cursor.fetchone()
+        return result
 
 async def get_user_by_wallet(wallet_address: str):
-    conn = aiosqlite.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM members WHERE wallet_address = ?', (wallet_address,))
-    result = cursor.fetchone()
-    conn.close()
-    return result
+    async with aiosqlite.connect('members.db') as conn:
+        cursor = await conn.cursor()
+        await cursor.execute('SELECT * FROM members WHERE wallet_address = ?', (wallet_address,))
+        result = await cursor.fetchone()
+        return result
 
 async def save_user_data(user_id: int, username: str, wallet_address: str, has_nft: bool, verification_memo: str = None):
-    conn = aiosqlite.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT OR REPLACE INTO members 
-        (user_id, username, wallet_address, last_checked, has_nft, verification_memo)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
-    ''', (user_id, username, wallet_address, has_nft, verification_memo))
-    conn.commit()
-    conn.close()
+    async with aiosqlite.connect('members.db') as conn:
+        cursor = await conn.cursor()
+        await cursor.execute('''
+            INSERT OR REPLACE INTO members 
+            (user_id, username, wallet_address, last_checked, has_nft, verification_memo)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+        ''', (user_id, username, wallet_address, has_nft, verification_memo))
+        await conn.commit()
 
 async def check_nft_ownership(wallet_address: str) -> bool:
     url = f'https://tonapi.io/v2/accounts/{wallet_address}/nfts?collection={NFT_COLLECTION_ADDRESS}&limit=1000&offset=0&indirect_ownership=false'

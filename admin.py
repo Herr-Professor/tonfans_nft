@@ -279,26 +279,25 @@ class AdminCommands:
         if current_member and len(current_member) == 3:
             members_to_add.append(current_member)
 
-        conn = aiosqlite.connect('members.db')
-        cursor = conn.cursor()
-        
-        for member in members_to_add:
-            if not (member['wallet'].startswith('EQ') or member['wallet'].startswith('UQ')):
-                failed_members.append(f"Invalid wallet format for @{member['username']}")
-                continue
-                
-            try:
-                cursor.execute('''
-                    INSERT OR REPLACE INTO members 
-                    (user_id, username, wallet_address)
-                    VALUES (?, ?, ?)
-                ''', (member['user_id'], member['username'], member['wallet']))
-                success_count += 1
-            except Exception as e:
-                failed_members.append(f"Error adding @{member['username']}: {str(e)}")
-                
-        conn.commit()
-        conn.close()
+        async with aiosqlite.connect('members.db') as conn:
+            cursor = await conn.cursor()
+            
+            for member in members_to_add:
+                if not (member['wallet'].startswith('EQ') or member['wallet'].startswith('UQ')):
+                    failed_members.append(f"Invalid wallet format for @{member['username']}")
+                    continue
+                    
+                try:
+                    await cursor.execute('''
+                        INSERT OR REPLACE INTO members 
+                        (user_id, username, wallet_address)
+                        VALUES (?, ?, ?)
+                    ''', (member['user_id'], member['username'], member['wallet']))
+                    success_count += 1
+                except Exception as e:
+                    failed_members.append(f"Error adding @{member['username']}: {str(e)}")
+                    
+            await conn.commit()
 
         response = []
         if success_count > 0:
