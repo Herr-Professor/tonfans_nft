@@ -160,21 +160,20 @@ class UserState(StatesGroup):
     waiting_for_transaction = State()
 
 # Remove language-related fields from database
-def setup_database():
-    conn = aiosqlite.connect('members.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS members (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT,
-            wallet_address TEXT UNIQUE,
-            last_checked TIMESTAMP,
-            has_nft BOOLEAN,
-            verification_memo TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
+async def setup_database():
+    async with aiosqlite.connect('members.db') as conn:
+        cursor = await conn.cursor()
+        await cursor.execute('''
+            CREATE TABLE IF NOT EXISTS members (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                wallet_address TEXT UNIQUE,
+                last_checked TIMESTAMP,
+                has_nft BOOLEAN,
+                verification_memo TEXT
+            )
+        ''')
+        await conn.commit()
 
 async def get_user_data(user_id: int):
     conn = aiosqlite.connect('members.db')
@@ -717,7 +716,7 @@ async def help_command(message: Message):
 # Main function
 async def main():
     print("Starting NFT Checker Bot...")
-    setup_database()
+    await setup_database()
     
     try:
         # Initialize admin commands
