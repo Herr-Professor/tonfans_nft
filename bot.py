@@ -4,7 +4,7 @@ import base64
 import requests
 from typing import Tuple, List, Dict
 import time as time_module
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import (
     Message, 
@@ -16,15 +16,35 @@ from aiogram.types import (
     ReplyKeyboardRemove,
     FSInputFile
 )
-from aiogram.filters import Command
+from aiogram.filters import Command, ChatMemberUpdatedFilter, KICKED, LEFT 
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 import aiosqlite
 import logging
-from ton_utils import escape_md
+from ton_utils import (
+    NFT_COLLECTION_ADDRESS,
+    TON_API_KEY,
+    TONAPI_KEY,
+    SHIVA_TOKEN_ADDRESS,
+    VERIFICATION_WALLET,
+    GROUP_INVITE_LINK,
+    NFT_MARKETPLACE_LINK,
+    ADMIN_IDS,
+    GROUP_ID,
+    BASE_URL,
+    WELCOME_IMAGE_PATH,
+    SHIVA_DEX_LINK,
+    PING_ADMIN_ID,
+    escape_md,
+    check_nft_ownership,
+    check_token_balance,
+    get_shiva_price,
+    get_top_holders
+)
 from admin import AdminCommands, register_admin_handlers
 from aiohttp import web
+import pytz
 
 # At the top of the file
 logging.basicConfig(
@@ -33,133 +53,130 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Basic Configuration
-API_TOKEN = '8067666224:AAELEOrjl0lHDUsqP7NUFU8FTYuzRt972ik'
-NFT_COLLECTION_ADDRESS = 'EQDmUOKwwa6KU0YFbA_CZTGccRdh5SWIQdBDKg741ecOqzR0'
-GROUP_INVITE_LINK = "https://t.me/+X44w-gPPj3AzYWU0"
-NFT_MARKETPLACE_LINK = "https://getgems.io/collection/EQDmUOKwwa6KU0YFbA_CZTGccRdh5SWIQdBDKg741ecOqzR0"
-ADMIN_IDS = ["1499577590","5851290427"]
-VERIFICATION_WALLET = "UQA53kg3IzUo2PTuaZxXB3qK7fICyc1u_Yu8d0JDYJRPVWpz"
-TON_API_KEY = "6767227019a948426ee2ef5a310f490e43cc1ca23363b932303002e59988f833"
-GROUP_ID = -1002476568928
-BASE_URL = "https://toncenter.com/api/v3"
-WELCOME_IMAGE_PATH = "boris.jpg"
-TONAPI_KEY = "AHZNMH2YZTTI2NIAAAACRWPE4TMJORYEHELN4ADWSJYBYH475H4AN4FYZUNVNZV4JM74HJY"
-SHIVA_TOKEN_ADDRESS = "EQAQAYqUr9IDiiMQKvXXHtLhT77WvbhH7VGhvPPJmBVF3O7y"
-SHIVA_DEX_LINK = "https://dedust.io/trade/SHIVA-TON"
-
-# Admin ID for ping
-PING_ADMIN_ID = 1499577590
-
 # Initialize bot and dispatcher
-bot = Bot(token=API_TOKEN)
+bot = Bot(token="8067666224:AAELEOrjl0lHDUsqP7NUFU8FTYuzRt972ik")
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 logger = logging.getLogger(__name__)
 
-# Messages in English
+# Messages in English and Russian
 MESSAGES = {
-    'username_required': """❌ You need to set a Telegram username before using this bot.
-
-To set a username:
-1. Go to Settings
-2. Tap on 'Username'
-3. Choose a username
-4. Return here and try again""",
-
-    'welcome_message': """👋 This is Boris.
-Welcome {}!
-
-I'm tonfans NFT checker bot. I'll help you verify your NFT ownership and get access to our exclusive group.
-
-Please send me your TON wallet address to begin verification.""",
-
-    'invalid_wallet': "❌ Invalid wallet address. Please send a valid TON wallet address.",
-    
-    'wallet_saved': """✅ Wallet address saved: `{}`
-
-Checking NFT ownership...""",
-
-    'verification_success': """🎉 Verification successful!
-
-Your wallet owns a TONFANS NFT. Welcome to the club! 🚀
-
-You can now join our exclusive group.""",
-
-    'verification_failed': """❌ Verification failed.
-
-No TONFANS NFT found in this wallet. To get access:
-1. Buy a TONFANS NFT on GetGems
-2. Try verification again with /verify""",
-
-    'already_verified': "✅ You're already verified! Welcome back!",
-    
-    'start_verification': "Please start verification using the /start command.",
-    
-    'no_pending_verification': "No pending verification requests found. Please start again with /start.",
-    
-    'whale_checking_balance': "🐳 Checking your $SHIVA balance...",
-    'whale_verification_success': "🐳 Congratulations! You qualify as a whale!",
-    'whale_verification_failed': "❌ Sorry, you don't qualify as a whale yet.",
-    
-    'price': """💰 *SHIVA Token Price*
-
-*USD:* ${:.8f} ({})
-*TON:* {:.8f} TON ({})
-
-Buy on DeDust: {}""",
-
-    'buy_shiva': """💎 *How to Buy SHIVA Tokens*
-
-1️⃣ Get TON coins from any exchange
-2️⃣ Transfer TON to your wallet
-3️⃣ Visit DeDust.io using the link below
-4️⃣ Connect your wallet
-5️⃣ Swap TON for SHIVA
-
-*Contract Address:*
-`{}`
-
-*Current Price:* ${:.8f}
-
-Click the button below to start trading! 🚀""",
-
-    'buy_nft': """🖼 *How to Buy TONFANS NFT*
-
-1️⃣ Get TON coins from any exchange
-2️⃣ Transfer TON to your wallet
-3️⃣ Visit GetGems using the link below
-4️⃣ Connect your wallet
-5️⃣ Choose your favorite NFT
-
-*Collection Address:*
-`{}`
-
-Click the button below to view the collection! 🎨""",
-
-    'help_message': """🤖 *Available Commands*
-
-*Basic Commands:*
-/start - Start the bot and begin verification
-/help - Show this help message
-
-*Verification Commands:*
-/wallet - Submit your wallet address
-/verify - Verify your NFT ownership
-
-*Token Commands:*
-/whale - Check if you qualify as a whale
-/price - Check current SHIVA token price
-/top - View top SHIVA token holders
-
-*Purchase Information:*
-/buy - Learn how to buy SHIVA tokens
-/nft - Learn how to buy TONFANS NFTs
-
-Need assistance? Start with /start to begin the verification process!"""
+    'username_required': {
+        'en': "❌ You need to set a Telegram username before using this bot.\n\nTo set a username:\n1. Go to Settings\n2. Tap on 'Username'\n3. Choose a username\n4. Return here and try again",
+        'ru': "❌ Вам нужно установить имя пользователя Telegram перед использованием этого бота.\n\nКак установить имя пользователя:\n1. Перейдите в Настройки\n2. Нажмите 'Имя пользователя'\n3. Выберите имя пользователя\n4. Вернитесь сюда и попробуйте снова"
+    },
+    'welcome_message': {
+        'en': "👋 This is Boris.\nWelcome {}!\n\nI'm tonfans NFT checker bot. I'll help you verify your NFT ownership and get access to our exclusive group.\n\nPlease send me your TON wallet address to begin verification.",
+        'ru': "👋 Это Борис.\nДобро пожаловать, {}!\n\nЯ бот для проверки TONFANS NFT. Я помогу вам подтвердить владение NFT и получить доступ в наш эксклюзивный чат.\n\nПожалуйста, отправьте мне свой TON-кошелек для начала проверки."
+    },
+    'invalid_wallet': {
+        'en': "❌ Invalid wallet address. Please send a valid TON wallet address.",
+        'ru': "❌ Неверный адрес кошелька. Пожалуйста, отправьте действительный TON-кошелек."
+    },
+    'wallet_saved': {
+        'en': "✅ Wallet address saved: `{}`\n\nChecking NFT ownership...",
+        'ru': "✅ Адрес кошелька сохранён: `{}`\n\nПроверяю владение NFT..."
+    },
+    'verification_success': {
+        'en': "🎉 Verification successful!\n\nYour wallet owns a TONFANS NFT. Welcome to the club! 🚀\n\nYou can now join our exclusive group.",
+        'ru': "🎉 Верификация успешна!\n\nВаш кошелек владеет TONFANS NFT. Добро пожаловать в клуб! 🚀\n\nТеперь вы можете присоединиться к нашему эксклюзивному чату."
+    },
+    'verification_failed': {
+        'en': "❌ Verification failed.\n\nNo TONFANS NFT found in this wallet. To get access:\n1. Buy a TONFANS NFT on GetGems\n2. Try verification again with /verify",
+        'ru': "❌ Верификация не удалась.\n\nВ этом кошельке не найдено TONFANS NFT. Для получения доступа:\n1. Купите TONFANS NFT на GetGems\n2. Попробуйте снова пройти верификацию с помощью /verify"
+    },
+    'already_verified': {
+        'en': "✅ You're already verified! Welcome back!",
+        'ru': "✅ Вы уже прошли проверку! Добро пожаловать обратно!"
+    },
+    'start_verification': {
+        'en': "Please start verification using the /start command.",
+        'ru': "Пожалуйста, начните верификацию с помощью команды /start."
+    },
+    'no_pending_verification': {
+        'en': "No pending verification requests found. Please start again with /start.",
+        'ru': "Не найдено ожидающих запросов на верификацию. Пожалуйста, начните заново с /start."
+    },
+    'whale_checking_balance': {
+        'en': "🐳 Checking your $SHIVA balance...",
+        'ru': "🐳 Проверяю ваш баланс $SHIVA..."
+    },
+    'whale_verification_success': {
+        'en': "🐳 Congratulations! You qualify as a whale!",
+        'ru': "🐳 Поздравляем! Вы квалифицируетесь как кит!"
+    },
+    'whale_verification_failed': {
+        'en': "❌ Sorry, you don't qualify as a whale yet.",
+        'ru': "❌ Извините, вы пока не квалифицируетесь как кит."
+    },
+    'price': {
+        'en': """💰 *SHIVA Token Price*\n\n*USD:* ${:.8f} ({})\n*TON:* {:.8f} TON ({})\n\nBuy on DeDust: {}""",
+        'ru': """💰 *Цена токена SHIVA*\n\n*USD:* ${:.8f} ({})\n*TON:* {:.8f} TON ({})\n\nКупить на DeDust: {}"""
+    },
+    'buy_shiva': {
+    'en': """💎 *How to Buy $SHIVA (New Gem)*\n\n1️⃣ Get TON coins from any exchange\n2️⃣ Transfer TON to your wallet\n3️⃣ Visit DeDust.io using the button below\n4️⃣ Connect your wallet\n5️⃣ Swap TON for SHIVA\n\n*Contract Address:*\n`{}`\n\n*Current Price:* ${:.8f}""", # Changed to {} here as we will escape the price string ourselves
+    'ru': """💎 *Как купить $SHIVA (Новый гем)*\n\n1️⃣ Получите монеты TON на любой бирже\n2️⃣ Переведите TON на свой кошелек\n3️⃣ Перейдите на DeDust.io, нажав кнопку ниже\n4️⃣ Подключите свой кошелек\n5️⃣ Обменяйте TON на SHIVA\n\n*Адрес контракта:*\n`{}`\n\n*Текущая цена:* ${}""" # Changed to {} here
+},
+    'buy_nft': {
+        'en': """🖼 *How to Buy TONFANS NFT*\n\n1️⃣ Get TON coins from any exchange\n2️⃣ Transfer TON to your wallet\n3️⃣ Visit GetGems using the link below\n4️⃣ Connect your wallet\n5️⃣ Choose your favorite NFT\n\n*Collection Address:*\n`{}`\n\nClick the button below to view the collection! 🎨""",
+        'ru': """🖼 *Как купить TONFANS NFT*\n\n1️⃣ Получите монеты TON на любой бирже\n2️⃣ Переведите TON на свой кошелек\n3️⃣ Перейдите на GetGems по ссылке ниже\n4️⃣ Подключите свой кошелек\n5️⃣ Выберите свой любимый NFT\n\n*Адрес коллекции:*\n`{}`\n\nНажмите на кнопку ниже, чтобы посмотреть коллекцию! 🎨"""
+    },
+    'help_message': {
+        'en': """🤖 *Available Commands*\n\n*Basic Commands:*\n/start - Start the bot and begin verification\n/help - Show this help message\n\n*Verification Commands:*\n/wallet - Submit your wallet address\n/verify - Verify your NFT ownership\n\n*Token Commands:*\n/whale - Check if you qualify as a whale\n/price - Check current SHIVA token price\n/top - View top SHIVA token holders\n\n*Purchase Information:*\n/buy - Learn how to buy SHIVA tokens\n/nft - Learn how to buy TONFANS NFTs\n\nNeed assistance? Start with /start to begin the verification process!""",
+        'ru': """🤖 *Доступные команды*\n\n*Основные команды:*\n/start - Запустить бота и начать верификацию\n/help - Показать это сообщение\n\n*Команды верификации:*\n/wallet - Отправить адрес кошелька\n/verify - Проверить владение NFT\n\n*Токен-команды:*\n/whale - Проверить, являетесь ли вы китом\n/price - Узнать текущую цену SHIVA\n/top - Посмотреть топ холдеров SHIVA\n\n*Покупка:*\n/buy - Как купить SHIVA\n/nft - Как купить TONFANS NFT\n\nНужна помощь? Начните с /start!"""
+    },
+    'please_wait': {
+        'en': "Please wait...",
+        'ru': "Пожалуйста, подождите..."
+    },
+    'error_fetching_data': {
+        'en': "❌ Error fetching data. Please try again later.",
+        'ru': "❌ Ошибка при получении данных. Пожалуйста, попробуйте позже."
+    },
+    'unable_to_fetch_price': {
+        'en': "❌ Unable to fetch price data. Please try again later.",
+        'ru': "❌ Не удалось получить данные о цене. Пожалуйста, попробуйте позже."
+    },
+    'unable_to_fetch_holders': {
+        'en': "❌ Unable to fetch holders data. Please try again later.",
+        'ru': "❌ Не удалось получить данные о держателях. Пожалуйста, попробуйте позже."
+    },
+    'resources_to_meet_requirements': {
+        'en': "Resources to help you meet the requirements:",
+        'ru': "Ресурсы для выполнения требований:"
+    },
+    'click_below_to_join': {
+        'en': "Click below to join:",
+        'ru': "Нажмите ниже, чтобы вступить:"
+    },
+    'join_group': {
+        'en': "Join Group",
+        'ru': "Вступить в группу"
+    },
+    'buy_nft_btn': {
+        'en': "Buy NFT",
+        'ru': "Купить NFT"
+    },
+    'buy_shiva_btn': {
+        'en': "Buy SHIVA",
+        'ru': "Купить SHIVA"
+    },
+    'trade_on_dedust': {
+        'en': "🔄 Trade on DeDust",
+        'ru': "🔄 Торговать на DeDust"
+    },
+    'view_on_getgems': {
+        'en': "🖼 View on GetGems",
+        'ru': "🖼 Смотреть на GetGems"
+    },
+    'fetching_top_holders': {
+        'en': "🔍 Fetching top SHIVA holders...",
+        'ru': "🔍 Получаю топ держателей SHIVA..."
+    }
 }
 
 class UserState(StatesGroup):
+    choosing_language = State()
     waiting_for_wallet = State()
     waiting_for_transaction = State()
 
@@ -167,6 +184,7 @@ class UserState(StatesGroup):
 async def setup_database():
     async with aiosqlite.connect('members.db') as conn:
         cursor = await conn.cursor()
+        # Keep existing members table creation
         await cursor.execute('''
             CREATE TABLE IF NOT EXISTS members (
                 user_id INTEGER PRIMARY KEY,
@@ -177,6 +195,17 @@ async def setup_database():
                 verification_memo TEXT
             )
         ''')
+        # --- ADD THIS NEW TABLE ---
+        await cursor.execute('''
+            CREATE TABLE IF NOT EXISTS monthly_message_stats (
+                user_id INTEGER NOT NULL,
+                year_month TEXT NOT NULL, -- Format: "YYYY-MM"
+                username TEXT,            -- Store last known username for convenience
+                message_count INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, year_month)
+            )
+        ''')
+        # --------------------------
         await conn.commit()
 
 async def get_user_data(user_id: int):
@@ -202,17 +231,6 @@ async def save_user_data(user_id: int, username: str, wallet_address: str, has_n
             VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
         ''', (user_id, username, wallet_address, has_nft, verification_memo))
         await conn.commit()
-
-async def check_nft_ownership(wallet_address: str) -> bool:
-    url = f'https://tonapi.io/v2/accounts/{wallet_address}/nfts?collection={NFT_COLLECTION_ADDRESS}&limit=1000&offset=0&indirect_ownership=false'
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        nft_items = response.json().get('nft_items', [])
-        return len(nft_items) > 0
-    except Exception as e:
-        logger.error(f"Error checking NFT ownership for {wallet_address}: {e}")
-        return False
 
 async def check_transaction(address: str, memo: str) -> bool:
     API_BASE_URL = "https://toncenter.com/api/v2"
@@ -257,89 +275,6 @@ async def check_transaction(address: str, memo: str) -> bool:
             logger.error(f"Error checking transaction: {str(e)}")
             return False
 
-async def check_token_balance(user_address: str, jetton_master_address: str) -> Tuple[int, float, Dict]:
-    """
-    Check SHIVA token balance and price for a given wallet address.
-    Returns raw balance, formatted balance, and price data.
-    """
-    try:
-        url = f"https://tonapi.io/v2/accounts/{user_address}/jettons/{jetton_master_address}"
-        headers = {
-            "Authorization": f"Bearer {TONAPI_KEY}"
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
-                if response.status != 200:
-                    logger.error(f"API request failed with status {response.status}")
-                    return 0, 0.0, {}
-                
-                data = await response.json()
-                balance = data.get("balance", "0")
-                price_data = data.get("price", {})
-                
-                try:
-                    raw_balance = int(balance)
-                    formatted_balance = raw_balance / 1e9  # Convert to actual SHIVA tokens
-                    logger.info(f"$SHIVA balance for address {user_address}: {formatted_balance:,.2f}")
-                    return raw_balance, formatted_balance, price_data
-                except (ValueError, TypeError) as e:
-                    logger.error(f"Error converting balance to integer: {str(e)}")
-                    return 0, 0.0, {}
-                
-    except Exception as e:
-        logger.error(f"Error checking token balance: {str(e)}")
-        logger.error(f"Error type: {type(e)}")
-        logger.error("Error traceback: ", exc_info=True)
-        return 0, 0.0, {}
-
-async def get_shiva_price() -> Dict:
-    """Get current SHIVA token price data."""
-    try:
-        url = f"https://tonapi.io/v2/accounts/{VERIFICATION_WALLET}/jettons/{SHIVA_TOKEN_ADDRESS}"
-        params = {
-            "currencies": "ton,usd",
-            "supported_extensions": "custom_payload"
-        }
-        headers = {
-            "Authorization": f"Bearer {TONAPI_KEY}"
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, headers=headers) as response:
-                if response.status != 200:
-                    logger.error(f"API request failed with status {response.status}")
-                    return {}
-                data = await response.json()
-                logger.info(f"Price API response: {data}")  # Log the response for debugging
-                return data.get("price", {})
-    except Exception as e:
-        logger.error(f"Error getting SHIVA price: {str(e)}")
-        return {}
-
-async def get_top_holders() -> List[Dict]:
-    """Get top SHIVA token holders."""
-    try:
-        url = f"https://tonapi.io/v2/jettons/{SHIVA_TOKEN_ADDRESS}/holders"
-        params = {
-            "limit": 10,
-            "offset": 0
-        }
-        headers = {
-            "Authorization": f"Bearer {TONAPI_KEY}"
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, headers=headers) as response:
-                if response.status != 200:
-                    logger.error(f"API request failed with status {response.status}")
-                    return []
-                    
-                data = await response.json()
-                return data.get("addresses", [])
-    except Exception as e:
-        logger.error(f"Error getting top holders: {str(e)}")
-        return []
-
 async def get_holder_name(holder_data: Dict) -> str:
     """Get holder name from database or owner data."""
     try:
@@ -372,350 +307,470 @@ async def notify_admins_wallet_registration(user_id: int, username: str, wallet_
     try:
         # Check NFT ownership
         has_nft = await check_nft_ownership(wallet_address)
-        
         # Check SHIVA balance
         raw_balance, formatted_balance, price_data = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
-        
         # Format notification message
         notification = (
             "🔔 *New Wallet Registration*\n\n"
             f"👤 User: @{escape_md(username)}\n"
-            f"🆔 ID: `{user_id}`\n"
-            f"👛 Wallet: `{wallet_address}`\n"
+            f"🆔 ID: `{escape_md(user_id)}`\n"
+            f"👛 Wallet: `{escape_md(wallet_address)}`\n"
             f"🎨 NFT Status: {'✅ Has NFT' if has_nft else '❌ No NFT'}\n"
-            f"💰 SHIVA Balance: {formatted_balance:,.2f}\n"
-            f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+            f"💰 SHIVA Balance: {escape_md(f'{formatted_balance:,.2f}')}\n"
+            f"⏰ Time: {escape_md(datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'))}"
         )
-        
         # Send to all admins
         for admin_id in ADMIN_IDS:
             try:
                 await bot.send_message(
                     chat_id=admin_id,
                     text=notification,
-                    parse_mode="Markdown"
+                    parse_mode="MarkdownV2"
                 )
             except Exception as e:
                 logger.error(f"Failed to notify admin {admin_id}: {str(e)}")
-                
     except Exception as e:
         logger.error(f"Error in admin notification: {str(e)}", exc_info=True)
+        
+@dp.message(lambda message: message.chat.id == -1002201273698 and \
+                            not message.from_user.is_bot and \
+                            message.text and \
+                            not message.text.startswith('/')
+           )
+async def handle_group_messages(message: Message):
+    user_id = message.from_user.id
+    username = message.from_user.username # Might be None
+    # Use UTC for consistency
+    current_time = datetime.now(timezone.utc)
+    year_month = current_time.strftime('%Y-%m') # Format "YYYY-MM"
+
+    logger.debug(f"Tracking message from user {user_id} (@{username}) for month {year_month}")
+
+    try:
+        async with aiosqlite.connect('members.db') as conn:
+            cursor = await conn.cursor()
+            # Use INSERT OR IGNORE + UPDATE or specific INSERT ON CONFLICT for atomicity
+            # This tries to insert, if it fails (user_id, year_month exists), it updates.
+            await cursor.execute('''
+                INSERT INTO monthly_message_stats (user_id, year_month, username, message_count)
+                VALUES (?, ?, ?, 1)
+                ON CONFLICT(user_id, year_month) DO UPDATE SET
+                    message_count = message_count + 1,
+                    username = excluded.username -- Update username on conflict as well
+            ''', (user_id, year_month, username))
+            await conn.commit()
+            logger.debug(f"Successfully updated/inserted message count for {user_id} in {year_month}")
+    except Exception as e:
+        logger.error(f"Failed to update message count for user {user_id} in month {year_month}: {e}", exc_info=True)
+# --- END OF NEW MESSAGE HANDLER ---
+
+# Helper to get language from FSM state
+async def get_lang(state, user_id):
+    data = await state.get_data()
+    lang = data.get('language', 'en')
+    return lang
+
+@dp.message(Command('topchatters'))
+async def top_chatters_command(message: Message):
+    # Determine current month
+    current_time = datetime.now(timezone.utc)
+    year_month = current_time.strftime('%Y-%m') # Format like "2024-07"
+
+    logger.info(f"User {message.from_user.id} requested top chatters for {year_month}")
+
+    try:
+        async with aiosqlite.connect('members.db') as conn:
+            cursor = await conn.cursor()
+            await cursor.execute('''
+                SELECT user_id, username, message_count
+                FROM monthly_message_stats
+                WHERE year_month = ?
+                ORDER BY message_count DESC
+                LIMIT 10
+            ''', (year_month,))
+            top_users = await cursor.fetchall()
+
+        if not top_users:
+            # No special escaping needed for year_month in MarkdownV1
+            reply_text = f"📊 No message data recorded yet for this month ({year_month})."
+            await message.reply(reply_text) 
+            return
+
+        response_lines = [f"🏆 *Top 10 Chatters This Month ({year_month})*\n"]
+        for i, (user_id, username, count) in enumerate(top_users, 1):
+            
+            display_name = f"`@{username}`" if username else f"`ID: {user_id}`"
+
+            response_lines.append(f"{i}. {display_name}: {count} messages")
+
+        reply_text = "\n".join(response_lines)
+        # --- Change parse_mode to Markdown ---
+        await message.reply(reply_text, parse_mode="Markdown")
+
+    except Exception as e:
+        logger.error(f"Error fetching top chatters: {e}", exc_info=True)
+        error_msg = "❌ An error occurred while fetching the top chatters. Please try again later."
+        await message.reply(error_msg)
+# --- END OF NEW COMMAND HANDLER ---
 
 @dp.message(Command('start'))
 async def start_command(message: types.Message, state: FSMContext):
-    """Start command handler"""
     user_id = message.from_user.id
     username = message.from_user.username
-
-    # Reset any previous state
+    # Always clear state
     await state.clear()
-    
-    # Check if user has a username
-    if not username:
-        await message.answer(MESSAGES['username_required'])
+    # Language selection keyboard
+    lang_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="English", callback_data="lang_en"),
+         InlineKeyboardButton(text="Русский", callback_data="lang_ru")]
+    ])
+    await message.answer("Please select your language / Пожалуйста, выберите язык:", reply_markup=lang_kb)
+    await state.set_state(UserState.choosing_language)
+
+@dp.callback_query(lambda c: c.data and c.data.startswith('lang_'))
+async def process_language_selection(callback_query: CallbackQuery, state: FSMContext):
+    lang = callback_query.data.split('_')[1]
+    user_id = callback_query.from_user.id
+    username = callback_query.from_user.username
+    await state.update_data(language=lang)
+    is_admin = str(user_id) in ADMIN_IDS
+    lang = 'en' if is_admin else lang
+    user_data = await get_user_data(user_id)
+
+    # Also apply the same logic to the 'already_verified' message
+    if user_data and user_data[4]:  # has_nft is True
+        # Escape the whole message before sending
+        already_verified_msg = escape_md(MESSAGES['already_verified'][lang])
+        await callback_query.message.answer(already_verified_msg, parse_mode="MarkdownV2")
+        
+        # Add group invite link for already verified users
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text={
+                'en': "Join Group",
+                'ru': "Вступить в группу"
+            }[lang], url=GROUP_INVITE_LINK)]
+        ])
+        await callback_query.message.answer(
+            escape_md(MESSAGES['click_below_to_join'][lang]), 
+            reply_markup=keyboard, 
+            parse_mode="MarkdownV2"
+        )
         return
 
+    # Format the message with the raw first name
+    raw_welcome_msg = MESSAGES['welcome_message'][lang].format(callback_query.from_user.first_name)
+    # Escape the entire formatted message just before sending
+    welcome_msg = escape_md(raw_welcome_msg)
+
+    logger.info(f"Attempting to send welcome message (escaped): {welcome_msg}")
     try:
-        # Send welcome image with caption
-        with open(WELCOME_IMAGE_PATH, 'rb') as photo:
-            await message.answer_photo(
+        await callback_query.message.answer_photo(
                 FSInputFile(WELCOME_IMAGE_PATH),
-                caption=f"👋 This is Boris.\nWelcome {escape_md(message.from_user.first_name)}!\n\n...I'm tonfans NFT checker bot. I'll help you verify your NFT ownership and get access to our exclusive group.\n\nPlease send me your TON wallet address to begin verification.",
-                parse_mode="Markdown"
+            caption=welcome_msg,
+            parse_mode="MarkdownV2"
             )
     except Exception as e:
-        logger.error(f"Error sending welcome image: {e}")
-        # Fallback to text-only welcome message
-        await message.answer(
-            f"👋 This is Boris.\nWelcome {message.from_user.first_name}!\n\nI'm tonfans NFT checker bot. I'll help you verify your NFT ownership and get access to our exclusive group.\n\nPlease send me your TON wallet address to begin verification.",
-            parse_mode="Markdown"
-        )
-    
+        logger.error(f"Failed to send photo, trying text. Error: {e}")
+        # Use the already escaped welcome_msg here
+        await callback_query.message.answer(welcome_msg, parse_mode="MarkdownV2")
     await state.set_state(UserState.waiting_for_wallet)
-    logger.info(f"Start command used by @{username} (ID: {user_id})")
 
 @dp.message(Command("wallet"))
 async def wallet_command(message: types.Message, state: FSMContext):
-    """Handle /wallet command - directly saves wallet"""
     args = message.text.split(maxsplit=1)
+    lang = await get_lang(state, message.from_user.id)
     if len(args) < 2:
-        await message.answer("Please provide a wallet address: /wallet <address>")
+        await message.answer(escape_md({
+            'en': "Please provide a wallet address: /wallet <address>",
+            'ru': "Пожалуйста, укажите адрес кошелька: /wallet <address>"
+        }[lang]), parse_mode="MarkdownV2")
         return
-    
     wallet_address = args[1].strip()
     user_id = message.from_user.id
     username = message.from_user.username
-
-    # Basic wallet address validation
     if not (wallet_address.startswith('EQ') or wallet_address.startswith('UQ')):
-        await message.answer(MESSAGES['invalid_wallet'])
+        await message.answer(escape_md(MESSAGES['invalid_wallet'][lang]), parse_mode="MarkdownV2")
         return
-    
-    # Direct save for /wallet command
     await save_user_data(user_id, username, wallet_address, False)
-    await message.answer("✅ Wallet saved successfully!")
-    
-    # Notify admins about the new wallet registration
+    await message.answer(escape_md({
+        'en': "✅ Wallet saved successfully!",
+        'ru': "✅ Кошелек успешно сохранен!"
+    }[lang]), parse_mode="MarkdownV2")
     await notify_admins_wallet_registration(user_id, username, wallet_address)
 
 @dp.message(UserState.waiting_for_wallet)
 async def handle_wallet_input(message: types.Message, state: FSMContext):
-    """Handle wallet address input from normal flow"""
+    lang = await get_lang(state, message.from_user.id)
     user_id = message.from_user.id
     username = message.from_user.username
     wallet_address = message.text.strip()
-    
-    # Basic wallet address validation
     if not (wallet_address.startswith('EQ') or wallet_address.startswith('UQ')):
-        await message.answer(MESSAGES['invalid_wallet'])
+        await message.answer(escape_md(MESSAGES['invalid_wallet'][lang]), parse_mode="MarkdownV2")
         return
-    
-    # Generate verification memo
     verification_memo = f"verify_{user_id}_{int(time_module.time())}"
-    
-    # Store wallet and memo temporarily in state
     await state.update_data(wallet_address=wallet_address, verification_memo=verification_memo)
-    
-    verification_msg = f"""To verify your wallet ownership, please:
-
-1. Send a small transaction (0.01 TON) to this address:
-`{VERIFICATION_WALLET}`
-
-2. Include this exact memo in your transaction message:
-`{verification_memo}`
-
-3. Use /verify command after sending the transaction.
-
-I'll check for your transaction and verify your NFT ownership."""
-    
+    verification_msg = {
+        'en': f"""To verify your wallet ownership, please:\n\n1. Send a small transaction (0.01 TON) to this address:\n`{VERIFICATION_WALLET}`\n\n2. Include this exact memo in your transaction message:\n`{verification_memo}`\n\n3. Use /verify command after sending the transaction.\n\nI'll check for your transaction and verify your NFT ownership.""",
+        'ru': f"""Для подтверждения владения кошельком, пожалуйста:\n\n1. Отправьте небольшую транзакцию (0.01 TON) на этот адрес:\n`{VERIFICATION_WALLET}`\n\n2. Укажите этот мемо в сообщении к транзакции:\n`{verification_memo}`\n\n3. Используйте команду /verify после отправки транзакции.\n\nЯ проверю вашу транзакцию и подтвержу владение NFT."""
+    }[lang]
     await message.answer(verification_msg, parse_mode="Markdown")
     await state.set_state(UserState.waiting_for_transaction)
 
 @dp.message(Command('verify'))
 async def verify_command(message: types.Message, state: FSMContext):
-    """Handle verification command"""
+    lang = await get_lang(state, message.from_user.id)
     user_id = message.from_user.id
     username = message.from_user.username
-    
-    # Get stored data from state
     state_data = await state.get_data()
     wallet_address = state_data.get('wallet_address')
     verification_memo = state_data.get('verification_memo')
-    
     if not wallet_address or not verification_memo:
-        await message.answer("Please start the verification process with /start first.")
+        await message.answer(escape_md({
+            'en': "Please start the verification process with /start first.",
+            'ru': "Пожалуйста, начните процесс верификации с /start."
+        }[lang]), parse_mode="MarkdownV2")
         return
-    
-    await message.answer("🔍 Checking your verification transaction...")
-    
-    # Check for the verification transaction
+    await message.answer(escape_md({
+        'en': "🔍 Checking your verification transaction...",
+        'ru': "🔍 Проверяю вашу транзакцию..."
+    }[lang]), parse_mode="MarkdownV2")
     transaction_verified = await check_transaction(VERIFICATION_WALLET, verification_memo)
-    
     if not transaction_verified:
-        failed_msg = f"""❌ Transaction not found. Please make sure you:
-
-1. Sent 0.01 TON to:
-`{VERIFICATION_WALLET}`
-
-2. Included this memo:
-`{verification_memo}`
-
-Try again with /verify after sending the transaction."""
-        await message.answer(failed_msg, parse_mode="Markdown")
+        failed_msg = {
+            'en': f"""❌ Transaction not found. Please make sure you:\n\n1. Sent 0.01 TON to:\n`{VERIFICATION_WALLET}`\n\n2. Included this memo:\n`{verification_memo}`\n\nTry again with /verify after sending the transaction.""",
+            'ru': f"""❌ Транзакция не найдена. Пожалуйста, убедитесь, что вы:\n\n1. Отправили 0.01 TON на:\n`{VERIFICATION_WALLET}`\n\n2. Указали этот мемо:\n`{verification_memo}`\n\nПопробуйте снова с /verify после отправки транзакции."""
+        }[lang]
+        await message.answer(escape_md(failed_msg), parse_mode="MarkdownV2")
         return
-
-    # If transaction verified, save wallet and check NFT ownership
     await save_user_data(user_id, username, wallet_address, False)
     has_nft = await check_nft_ownership(wallet_address)
-    
-    if has_nft:
+    _, shiva_balance, _ = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+    nft_requirement = has_nft
+    shiva_requirement = shiva_balance >= 250_000
+    if nft_requirement and shiva_requirement:
         await save_user_data(user_id, username, wallet_address, True)
-        await message.answer(MESSAGES['verification_success'])
-        
+        await message.answer(escape_md({
+            'en': "🎉 Verification successful! You meet all requirements.\n\nYou can now join our exclusive group!",
+            'ru': "🎉 Верификация успешна! Вы соответствуете всем требованиям.\n\nТеперь вы можете присоединиться к нашему эксклюзивному чату!"
+        }[lang]), parse_mode="MarkdownV2")
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Join Group", url=GROUP_INVITE_LINK)]
+            [InlineKeyboardButton(text={
+                'en': "Join Group",
+                'ru': "Вступить в группу"
+            }[lang], url=GROUP_INVITE_LINK)]
         ])
-        await message.answer("You can now join our exclusive group!", reply_markup=keyboard)
+        await message.answer(escape_md({
+            'en': "Click below to join:",
+            'ru': "Нажмите ниже, чтобы вступить:"
+        }[lang]), reply_markup=keyboard, parse_mode="MarkdownV2")
     else:
+        reasons = []
+        if not nft_requirement:
+            reasons.append({
+                'en': "• You do not own a TONFANS NFT.",
+                'ru': "• У вас нет TONFANS NFT."
+            }[lang])
+        if not shiva_requirement:
+            reasons.append({
+                'en': f"• You need at least 250,000 $SHIVA tokens. (Current: {shiva_balance:,.2f})",
+                'ru': f"• Вам нужно минимум 250,000 $SHIVA токенов. (Сейчас: {shiva_balance:,.2f})"
+            }[lang])
+        reason_text = "\n".join(reasons)
+        await message.answer(escape_md({
+            'en': f"❌ You do not meet the requirements to join the group yet:\n\n{reason_text}\n\nPlease ensure you have at least 1 TONFANS NFT and 250,000 $SHIVA tokens, then try verification again.",
+            'ru': f"❌ Вы пока не соответствуете требованиям для вступления в группу:\n\n{reason_text}\n\nПожалуйста, убедитесь, что у вас есть хотя бы 1 TONFANS NFT и 250,000 $SHIVA токенов, затем попробуйте снова."
+        }[lang]), parse_mode="MarkdownV2")
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Buy NFT", url=NFT_MARKETPLACE_LINK)]
+            [InlineKeyboardButton(text={
+                'en': "Buy NFT",
+                'ru': "Купить NFT"
+            }[lang], url=NFT_MARKETPLACE_LINK)],
+            [InlineKeyboardButton(text={
+                'en': "Buy SHIVA",
+                'ru': "Купить SHIVA"
+            }[lang], url=SHIVA_DEX_LINK)]
         ])
-        await message.answer(
-            "To get access, buy a TONFANS NFT on GetGems and try verification again with /verify",
-            reply_markup=keyboard
-        )
-    
+        await message.answer(escape_md({
+            'en': "Resources to help you meet the requirements:",
+            'ru': "Ресурсы для выполнения требований:"
+        }[lang]), reply_markup=keyboard, parse_mode="MarkdownV2")
     await state.clear()
 
 @dp.message(Command('whale'))
-async def whale_command(message: Message):
-    """Check if user qualifies as a whale."""
+async def whale_command(message: Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
     user_id = message.from_user.id
     username = message.from_user.username
-    
     user_data = await get_user_data(user_id)
-    
-    if not user_data or not user_data[2]:  # Check if user exists and has wallet
-        await message.reply(MESSAGES['start_verification'])
+    if not user_data or not user_data[2]:
+        await message.reply(escape_md(MESSAGES['start_verification'][lang]), parse_mode="MarkdownV2")
         return
-
     wallet_address = user_data[2]
-    await message.reply(MESSAGES['whale_checking_balance'])
-    
-    # Check SHIVA token balance
+    await message.reply(escape_md(MESSAGES['whale_checking_balance'][lang]), parse_mode="MarkdownV2")
     raw_balance, formatted_balance, _ = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
-    
-    # Show current balance regardless of whale status
-    balance_message = escape_md(f"Your $SHIVA balance: {formatted_balance:,.2f}")
-    await message.reply(balance_message)
-    
-    # Escape username and wallet address for Markdown
+    balance_message = escape_md({
+        'en': f"Your $SHIVA balance: {formatted_balance:,.2f}",
+        'ru': f"Ваш баланс $SHIVA: {formatted_balance:,.2f}"
+    }[lang])
+    await message.reply(balance_message, parse_mode="MarkdownV2")
     safe_username = escape_md(username)
     safe_wallet = escape_md(wallet_address)
-    
     whale_notification = (
-        f" Whale Status checked by @{safe_username} (ID: `{user_id}`)\n" # Also ensure user_id is code-formatted
-        f" Balance: {formatted_balance:,.2f} $SHIVA\n"
-        f" Wallet: `{safe_wallet}`" # Code-format the wallet address
+        f"Whale Status checked by @{safe_username} (ID: `{safe_wallet}`)\n"
+        f"Balance: {escape_md(f'{formatted_balance:,.2f}')} $SHIVA\n"
+        f"Wallet: `{safe_wallet}`"
     )
-    
     for admin_id in ADMIN_IDS:
         try:
             await bot.send_message(
                 chat_id=admin_id,
                 text=whale_notification,
-                parse_mode="Markdown"
+                parse_mode="MarkdownV2"
             )
         except Exception as e:
             logger.error(f"Failed to notify admin {admin_id}: {str(e)}")
-    
-    if formatted_balance >= 10_000_000:  # 10M SHIVA threshold
-        await message.reply(MESSAGES['whale_verification_success'])
+    if formatted_balance >= 10_000_000:
+        await message.reply(escape_md(MESSAGES['whale_verification_success'][lang]), parse_mode="MarkdownV2")
     else:
-        # Calculate how many more SHIVA needed
         shiva_needed = 10_000_000 - formatted_balance
         message_text = (
-            f"{MESSAGES['whale_verification_failed']}\n"
-            f"You need {shiva_needed:,.2f} more $SHIVA to qualify."
+            f"{escape_md(MESSAGES['whale_verification_failed'][lang])}\n" +
+            escape_md({
+                'en': f"You need {shiva_needed:,.2f} more $SHIVA to qualify.",
+                'ru': f"Вам нужно ещё {shiva_needed:,.2f} $SHIVA, чтобы квалифицироваться."
+            }[lang])
         )
-        await message.reply(message_text)
+        await message.reply(message_text, parse_mode="MarkdownV2")
 
 @dp.message(Command('price'))
-async def price_command(message: Message):
+async def price_command(message: Message, state: FSMContext): # <--- Added state
     """Show current SHIVA token price."""
+    lang = await get_lang(state, message.from_user.id) # <--- Get language
     try:
-        price_data = await get_shiva_price()
-        if not price_data:
-            await message.reply("❌ Unable to fetch price data. Please try again later.")
+        price_api_data = await get_shiva_price()
+        if not price_api_data:
+            await message.reply(escape_md(MESSAGES['unable_to_fetch_price'][lang]), parse_mode="MarkdownV2")
             return
 
-        # Access the nested structure correctly
-        prices = price_data.get("prices", {})
-        changes = price_data.get("diff_24h", {})
-        
-        # Get prices with proper default values
+        prices = price_api_data.get("prices", {})
+        changes = price_api_data.get("diff_24h", {})
+
         usd_price = prices.get("USD", 0)
         ton_price = prices.get("TON", 0)
-        usd_change = changes.get("USD", "+0%")
+        usd_change = changes.get("USD", "+0%") 
         ton_change = changes.get("TON", "+0%")
 
-        price_message = MESSAGES['price'].format(
+        price_template = MESSAGES['price'][lang] 
+
+        price_message_text = price_template.format(
             usd_price,
-            usd_change,
+            usd_change, # Pass the string directly
             ton_price,
-            ton_change,
-            SHIVA_DEX_LINK
+            ton_change, # Pass the string directly
+            escape_md(SHIVA_DEX_LINK)
         )
-        await message.reply(price_message, parse_mode="Markdown")
+        
+        # Send the message using Markdown, as the template uses it
+        await message.reply(price_message_text, parse_mode="Markdown", disable_web_page_preview=True) # Added preview disable
+
     except Exception as e:
-        logger.error(f"Error in price command: {e}")
-        await message.reply("❌ Error fetching price data. Please try again later.")
+        logger.error(f"Error in price command: {e}", exc_info=True) 
+        # Use language for error message
+        await message.reply(escape_md(MESSAGES['error_fetching_data'][lang]), parse_mode="MarkdownV2")
 
 @dp.message(Command('top'))
-async def top_command(message: Message):
-    """Show top SHIVA token holders."""
+async def top_command(message: Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
     try:
-        await message.reply("🔍 Fetching top SHIVA holders...")
-        
+        await message.reply(escape_md(MESSAGES['fetching_top_holders'][lang]), parse_mode="MarkdownV2")
         holders = await get_top_holders()
         if not holders:
-            await message.reply("❌ Unable to fetch holders data. Please try again later.")
+            await message.reply(escape_md(MESSAGES['unable_to_fetch_holders'][lang]), parse_mode="MarkdownV2")
             return
-            
-        response = "🏆 *Top SHIVA Holders*\n\n"
-        
+        response = {
+            'en': "🏆 *Top SHIVA Holders*\n\n",
+            'ru': "🏆 *Топ держателей SHIVA*\n\n"
+        }[lang]
         for i, holder in enumerate(holders, 1):
-            balance = int(holder.get("balance", "0")) / 1e9  # Convert to actual SHIVA tokens
+            balance = int(holder.get("balance", "0")) / 1e9
             holder_name = await get_holder_name(holder)
-            response += f"{i}. {holder_name}: {balance:,.2f} SHIVA\n"
-            
-        response += f"\n💫 Total Holders: {len(holders):,}"
-        
-        await message.reply(response, parse_mode="Markdown")
-        
+            response += {
+                'en': f"{i}. {holder_name}: {balance:,.2f} SHIVA\n",
+                'ru': f"{i}. {holder_name}: {balance:,.2f} SHIVA\n"
+            }[lang]
+        response += {
+            'en': f"\n💫 Total Holders: {len(holders):,}",
+            'ru': f"\n💫 Всего держателей: {len(holders):,}"
+        }[lang]
+        await message.reply(escape_md(response), parse_mode="MarkdownV2")
     except Exception as e:
         logger.error(f"Error in top command: {e}")
-        await message.reply("❌ Error fetching top holders. Please try again later.")
+        await message.reply(escape_md(MESSAGES['error_fetching_data'][lang]), parse_mode="MarkdownV2")
 
-@dp.message(Command('buy'))
-async def buy_command(message: Message):
-    """Show information about buying SHIVA tokens."""
+@dp.message(Command('buy_new_gem_shiva'))
+async def buy_new_gem_shiva_command(message: Message, state: FSMContext):
+    """Show information and link to buy SHIVA token."""
+    lang = await get_lang(state, message.from_user.id)
     try:
-        # Get current price for display
+        # Get current price to include in the message
         price_data = await get_shiva_price()
+        # Default to 0 if price data is missing or invalid
         current_price = price_data.get("prices", {}).get("USD", 0)
-        
-        # Create button to DeDust
+
+        # Create the inline keyboard button with the new DEX link
+        # Make sure NEW_SHIVA_DEX_LINK is defined somewhere accessible (see point 2 below)
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="🔄 Trade on DeDust",
-                url=SHIVA_DEX_LINK
+                text=MESSAGES['trade_on_dedust'][lang], # Text from MESSAGES
+                url=SHIVA_DEX_LINK # Use the new link variable
             )]
         ])
+
+        # Get the message template from MESSAGES (see point 3 below)
+        buy_message_template = MESSAGES['buy_shiva'][lang]
         
-        # Send message with instructions
-        await message.reply(
-            MESSAGES['buy_shiva'].format(
-                SHIVA_TOKEN_ADDRESS,
-                current_price
-            ),
-            reply_markup=keyboard,
-            parse_mode="Markdown"
+        buy_message_text = buy_message_template.format(
+            escape_md(SHIVA_TOKEN_ADDRESS),
+            current_price
         )
-        
+
+        await message.reply(
+            buy_message_text,
+            reply_markup=keyboard,
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
+        logger.info(f"Sent buy_new_gem_shiva info to user {message.from_user.id}")
+
     except Exception as e:
-        logger.error(f"Error in buy command: {e}")
-        await message.reply("❌ Error fetching trading information. Please try again later.")
+        logger.error(f"Error in buy_new_gem_shiva command for user {message.from_user.id}: {e}", exc_info=True)
+        await message.reply(escape_md(MESSAGES['error_fetching_data'][lang]), parse_mode="Markdown")
 
 @dp.message(Command('nft'))
-async def nft_command(message: Message):
-    """Show information about buying TONFANS NFTs."""
+async def nft_command(message: Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
     try:
-        # Create button to GetGems
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="🖼 View on GetGems",
+                text=MESSAGES['view_on_getgems'][lang],
                 url=NFT_MARKETPLACE_LINK
             )]
         ])
-        
-        # Send message with instructions
         await message.reply(
-            MESSAGES['buy_nft'].format(NFT_COLLECTION_ADDRESS),
+            escape_md(MESSAGES['buy_nft'][lang].format(NFT_COLLECTION_ADDRESS)),
             reply_markup=keyboard,
-            parse_mode="Markdown"
+            parse_mode="MarkdownV2"
         )
-        
     except Exception as e:
         logger.error(f"Error in nft command: {e}")
-        await message.reply("❌ Error fetching NFT information. Please try again later.")
+        await message.reply(escape_md(MESSAGES['error_fetching_data'][lang]), parse_mode="MarkdownV2")
 
 @dp.message(Command('help'))
-async def help_command(message: Message):
-    """Show available commands and their functions."""
+async def help_command(message: Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
     await message.reply(
-        MESSAGES['help_message'],
-        parse_mode="Markdown"
+        escape_md(MESSAGES['help_message'][lang]),
+        parse_mode="MarkdownV2"
     )
 
 async def health_check(request):
@@ -731,7 +786,7 @@ async def start_http_server():
     logger.info("HTTP server started on port 8000")
 
 async def send_active_ping(bot_instance: Bot):
-    """Sends a ping message every 30 seconds to keep the bot active."""
+    """Sends a ping message every 6 hours to keep the bot active."""
     while True:
         try:
             # Send ping to admin
@@ -745,20 +800,156 @@ async def send_active_ping(bot_instance: Bot):
                 count = await cursor.fetchone()
                 logger.info(f"Database health check: {count[0]} members in database")
             
-            # Wait for 30 seconds before next ping
-            await asyncio.sleep(30)
+            # Wait for 6 hours before next ping
+            await asyncio.sleep(21600)
             
         except Exception as e:
             logger.error(f"Failed to send 'I am active' ping: {e}")
             # If there's an error, wait a shorter time before retrying
             await asyncio.sleep(5)
 
+async def daily_membership_check(bot_instance: Bot):
+    """Checks all users daily at 00:00 UTC and removes those who do not meet requirements."""
+    while True:
+        # Calculate seconds until next 00:00 UTC
+        now = datetime.utcnow().replace(tzinfo=timezone.utc)
+        # Ensure the next run is strictly in the future, even if run exactly at midnight
+        if now.hour == 0 and now.minute == 0 and now.second < 30: # Add a small buffer
+            next_run = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        else:
+            # Calculate next midnight normally
+             target_time = datetime.combine(now.date(), datetime.min.time()).replace(tzinfo=timezone.utc) + timedelta(days=1)
+             if target_time <= now: # Handle edge case if calculation results in past/present time
+                 target_time += timedelta(days=1)
+             next_run = target_time
+
+        sleep_seconds = (next_run - now).total_seconds()
+        logger.info(f"Daily membership check scheduled to run in {sleep_seconds:.2f} seconds.")
+        await asyncio.sleep(sleep_seconds)
+        logger.info("Starting daily membership check...")
+
+        removed_users = []
+        processed_users = 0
+        start_time = datetime.now(timezone.utc)
+
+        try:
+            async with aiosqlite.connect('members.db') as conn:
+                cursor = await conn.execute('SELECT user_id, username, wallet_address FROM members WHERE wallet_address IS NOT NULL AND wallet_address != ""')
+                users = await cursor.fetchall()
+            
+            total_users_to_check = len(users)
+            logger.info(f"Checking {total_users_to_check} users with wallets.")
+
+            for user_id, username, wallet_address in users:
+                # Add a try/except block for each user's check process
+                try:
+                    processed_users += 1
+                    # Exclude core person and admins
+                    if str(user_id) in ADMIN_IDS or str(user_id) == '718025267':
+                        logger.debug(f"Skipping admin/core user: {user_id}")
+                        continue # Skip to the next user
+                    
+                    logger.debug(f"Checking user: {user_id} (@{username or 'NoUsername'})")
+                    
+                    # Check requirements
+                    has_nft = await check_nft_ownership(wallet_address)
+                    # Add a small delay between the two API calls for the SAME user, just in case
+                    await asyncio.sleep(0.5) 
+                    _, shiva_balance, _ = await check_token_balance(wallet_address, SHIVA_TOKEN_ADDRESS)
+                    
+                    meets_requirements = has_nft and shiva_balance >= 250_000
+
+                    if not meets_requirements:
+                        logger.info(f"User {user_id} (@{username or 'NoUsername'}) does not meet requirements (NFT: {has_nft}, SHIVA: {shiva_balance:.2f}). Attempting removal.")
+                        try:
+                            # Update the database to mark user as not verified anymore
+                            async with aiosqlite.connect('members.db') as update_conn:
+                                await update_conn.execute('UPDATE members SET has_nft = ? WHERE user_id = ?', (False, user_id))
+                                await update_conn.commit()
+                                logger.info(f"Updated verification status for user {user_id} to False")
+                            
+                            # Send notification to the user
+                            removal_reason = []
+                            if not has_nft:
+                                removal_reason.append("no longer own a TONFANS NFT")
+                            if shiva_balance < 250_000:
+                                removal_reason.append(f"SHIVA balance too low ({shiva_balance:,.2f}/250,000)")
+                            
+                            reason_text = " and ".join(removal_reason)
+                            
+                            notification_msg = f"""❗️ *Group Membership Notice*
+
+You have been removed from the TONFANS group because you {reason_text}.
+
+To rejoin the group, please:
+1. Ensure you own at least 1 TONFANS NFT
+2. Have at least 250,000 SHIVA tokens
+3. Reverify using the bot with /start command
+
+If you believe this is a mistake, please reverify your wallet again."""
+                            
+                            try:
+                                await bot_instance.send_message(
+                                    chat_id=user_id,
+                                    text=notification_msg,
+                                    parse_mode="Markdown"
+                                )
+                                logger.info(f"Sent removal notification to user {user_id}")
+                            except Exception as notify_err:
+                                logger.error(f"Failed to notify user {user_id} about removal: {notify_err}")
+                            
+                            # Ban and immediately unban to kick
+                            await bot_instance.ban_chat_member(GROUP_ID, user_id)
+                            # Add a small delay before unbanning if needed, but usually not necessary
+                            # await asyncio.sleep(0.2) 
+                            await bot_instance.unban_chat_member(GROUP_ID, user_id)  
+                            removed_users.append(f"@{escape_md(username or 'NoUsername')} \\(ID: `{escape_md(user_id)}`\\)") # Escape for final message
+                            logger.info(f"Successfully removed user {user_id}")
+                        except Exception as remove_err:
+                            # Log specific error for removal failure
+                            logger.error(f"Failed to remove user {user_id} (@{username or 'NoUsername'}) from group {GROUP_ID}: {remove_err}")
+                    else:
+                         logger.debug(f"User {user_id} meets requirements.")
+
+                except Exception as check_err:
+                    # Log errors during the check process for a specific user
+                    logger.error(f"Error checking requirements for user {user_id} (@{username or 'NoUsername'}): {check_err}")
+                
+                finally:
+                    logger.debug(f"Sleeping for 1.5s after checking user {user_id}")
+                    await asyncio.sleep(1.5) 
+
+        except Exception as e:
+            # Log errors related to the overall process (e.g., database connection)
+            logger.error(f"Error during daily membership check main loop: {e}", exc_info=True)
+
+        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+        log_msg = f"Daily membership check finished. Processed: {processed_users}/{total_users_to_check}. Removed: {len(removed_users)}. Duration: {duration:.2f}s."
+        logger.info(log_msg)
+
+        if removed_users:
+            admin_msg_text = (
+                f"🚫 *Daily Membership Check Report*\n\n"
+                f"The following users were removed for not meeting requirements \\(≥1 NFT and ≥250,000 \\$SHIVA\\):\n\n"
+                + "\n".join(removed_users) +
+                f"\n\n_Check completed in {duration:.1f} seconds\\._"
+            )
+        else:
+            admin_msg_text = f"✅ Daily membership check complete\\. No users needed to be removed\\. \\({duration:.1f}s\\)"
+        
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot_instance.send_message(admin_id, admin_msg_text, parse_mode="MarkdownV2")
+            except Exception as e:
+                logger.error(f"Failed to notify admin {admin_id}: {e}")
+
 async def main():
     print("Starting NFT Checker Bot...")
     await setup_database()
     
-    # Create the background task for sending pings
+    # Create background tasks
     ping_task = asyncio.create_task(send_active_ping(bot))
+    daily_check_task = asyncio.create_task(daily_membership_check(bot))
     
     try:
         # Start HTTP server for health checks
@@ -768,21 +959,31 @@ async def main():
         admin_commands = AdminCommands(bot)
         register_admin_handlers(dp, admin_commands)
         
-        # Start polling
+        # Start polling - This is the main event loop runner
         await dp.start_polling(bot)
         
     except Exception as e:
-        logger.error(f"Main loop error: {e}")
+        # Log errors occurring in the main polling or startup process
+        logger.error(f"Main loop error: {e}", exc_info=True)
     finally:
-        # Optionally cancel the ping task on shutdown
+        # Cancel all background tasks on shutdown
         ping_task.cancel()
-        try:
-            await ping_task
-        except asyncio.CancelledError:
-            logger.info("Ping task cancelled.")
-            
+        daily_check_task.cancel()
+        
+        await asyncio.gather(
+            ping_task, 
+            daily_check_task,  
+            return_exceptions=True # Important for robustness
+        )
+        
         await bot.session.close()
         logger.info("Bot session closed.")
 
 if __name__ == '__main__':
+    # Make sure logging is configured before running
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__) # Ensure logger is defined globally if needed here
     asyncio.run(main())

@@ -5,20 +5,35 @@ import requests
 import base64
 import logging
 from typing import Tuple, List, Dict, Optional
+import re
 
 logger = logging.getLogger(__name__)
 
-# Configuration (Consider moving these to a central config file/object later)
+# --- Centralized Configuration ---
 NFT_COLLECTION_ADDRESS = 'EQDmUOKwwa6KU0YFbA_CZTGccRdh5SWIQdBDKg741ecOqzR0'
 TON_API_KEY = "6767227019a948426ee2ef5a310f490e43cc1ca23363b932303002e59988f833" # For Toncenter
-TONAPI_KEY = "AHZNMH2YZTTI2NIAAAACRWPE4TMJORYEHELN4ADWSJYBYH475H4AN4FYZUNVNZV4JM74HJY" # For TonAPI.io
+TONAPI_KEY = "AHZNMH2YVN2KADAAAAALIZOB4JXFCW32KUI76NZKQBUULC3RRFH3WEOYKA32KPH27VHWLPY" # For TonAPI.io
 SHIVA_TOKEN_ADDRESS = "EQAQAYqUr9IDiiMQKvXXHtLhT77WvbhH7VGhvPPJmBVF3O7y"
 VERIFICATION_WALLET = "UQA53kg3IzUo2PTuaZxXB3qK7fICyc1u_Yu8d0JDYJRPVWpz" # For wallet verification tx check
+GROUP_INVITE_LINK = "https://t.me/+X44w-gPPj3AzYWU0"
+NFT_MARKETPLACE_LINK = "https://getgems.io/collection/EQDmUOKwwa6KU0YFbA_CZTGccRdh5SWIQdBDKg741ecOqzR0"
+ADMIN_IDS = ["1499577590", "5851290427"]
+GROUP_ID = -1002476568928
+BASE_URL = "https://toncenter.com/api/v3"
+WELCOME_IMAGE_PATH = "boris.jpg"
+SHIVA_DEX_LINK = "https://dedust.io/swap/TON/EQAQAYqUr9IDiiMQKvXXHtLhT77WvbhH7VGhvPPJmBVF3O7y"
+PING_ADMIN_ID = 1499577590
 
 def escape_md(text: str) -> str:
-    """MarkdownV2 escaper"""
-    escape_chars = '_*[]()~`>#+-=|{}.!-'
-    return ''.join(['\\' + char if char in escape_chars else char for char in str(text)])
+    """
+    Escapes all special characters for Telegram MarkdownV2.
+    """
+    if text is None:
+        return ''
+    text = str(text)
+    # List of all special characters for MarkdownV2
+    escape_chars = r'[_*\[\]()~`>#+\-=|{}.!]'
+    return re.sub(escape_chars, lambda match: '\\' + match.group(0), text)
 
 async def check_nft_ownership(wallet_address: str) -> bool:
     """Checks if a wallet holds an NFT from the specified collection."""
@@ -126,40 +141,23 @@ async def check_token_balance(user_address: str, jetton_master_address: str) -> 
 
 async def get_shiva_price() -> Dict:
     """Get current SHIVA token price data."""
-    # Use a known address holding the token to fetch price, or directly query the jetton if API supports it
-    # Using the VERIFICATION_WALLET might not always work if it doesn't hold SHIVA
-    # A better approach might be querying the jetton master directly if TonAPI supports price info there,
-    # or using a known holder like the deployer or a large holder address.
-    # Let's stick to the previous method for now, assuming VERIFICATION_WALLET works or is irrelevant for price endpoint.
-    url = f"https://tonapi.io/v2/jettons/{SHIVA_TOKEN_ADDRESS}/" # Check Jetton Master endpoint
-    # Alternative: url = f"https://tonapi.io/v2/accounts/{SOME_KNOWN_SHIVA_HOLDER}/jettons/{SHIVA_TOKEN_ADDRESS}"
-    headers = {"Authorization": f"Bearer {TONAPI_KEY}"}
     try:
+        url = f"https://tonapi.io/v2/accounts/{VERIFICATION_WALLET}/jettons/{SHIVA_TOKEN_ADDRESS}"
+        params = {
+            "currencies": "ton,usd",
+            "supported_extensions": "custom_payload"
+        }
+        headers = {
+            "Authorization": f"Bearer {TONAPI_KEY}"
+        }
         async with aiohttp.ClientSession() as session:
-             # Fetching general jetton info might contain market data
-            async with session.get(url + "masters", headers=headers) as response_master: # Example adjustment
-                 if response_master.status == 200:
-                      master_data = await response_master.json()
-                      # Look for price information within the jetton master data if available
-                      # This is hypothetical based on potential API structure
-                      if "market_data" in master_data:
-                          return master_data["market_data"].get("price", {})
-
-            # Fallback to original method if the above doesn't work or isn't implemented by TonAPI
-            # Querying a specific account known to hold the token (if needed)
-            price_query_url = f"https://tonapi.io/v2/rates?tokens={SHIVA_TOKEN_ADDRESS}¤cies=ton,usd"
-            async with session.get(price_query_url, headers=headers, timeout=10) as response:
-                  if response.status != 200:
-                        logger.error(f"TonAPI price request failed with status {response.status}")
-                        return {}
-                  data = await response.json()
-                  rates = data.get("rates", {})
-                  if SHIVA_TOKEN_ADDRESS in rates:
-                       return rates[SHIVA_TOKEN_ADDRESS].get("prices", {}) # Extract prices specifically
-                  else:
-                       logger.warning(f"Price data not found for {SHIVA_TOKEN_ADDRESS} in rates response.")
-                       return {}
-
+            async with session.get(url, params=params, headers=headers) as response:
+                if response.status != 200:
+                    logger.error(f"API request failed with status {response.status}")
+                    return {}
+                data = await response.json()
+                logger.info(f"Price API response: {data}")  # Log the response for debugging
+                return data.get("price", {})
     except Exception as e:
         logger.error(f"Error getting SHIVA price: {str(e)}")
         return {}

@@ -1,1 +1,0 @@
-api_token = "8067666224:AAELEOrjl0lHDUsqP7NUFU8FTYuzRt972ik" # you get this token when you create a bot in BotFather

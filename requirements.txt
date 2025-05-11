@@ -4,3 +4,4 @@ pytonconnect
 tonsdk
 aiohttp
 aiosqlite
+pytz
