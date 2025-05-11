@@ -6,6 +6,9 @@ import base64
 import logging
 from typing import Tuple, List, Dict, Optional
 import re
+import time
+import random
+import string
 
 logger = logging.getLogger(__name__)
 
@@ -179,5 +182,157 @@ async def get_top_holders(jetton_master_address: str, limit: int = 10) -> List[D
     except Exception as e:
         logger.error(f"Error getting top holders for {jetton_master_address}: {str(e)}")
         return []
+
+# === NEW FUNCTIONS FOR JETTON BURN ===
+
+# Define the Jetton master address to use for burns
+JETTON_MINTER_ADDRESS = SHIVA_TOKEN_ADDRESS  # Use the SHIVA token address
+
+async def get_jetton_wallet_address(owner_address: str, jetton_minter: str = JETTON_MINTER_ADDRESS) -> Optional[str]:
+    """
+    Get the Jetton wallet address for a specific owner.
+    
+    Args:
+        owner_address: The TON wallet address of the owner
+        jetton_minter: The Jetton minter contract address
+        
+    Returns:
+        The Jetton wallet address or None if lookup fails
+    """
+    try:
+        url = f"https://tonapi.io/v2/accounts/{owner_address}/jettons"
+        headers = {"Authorization": f"Bearer {TONAPI_KEY}"}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    logger.error(f"Jetton wallet API request failed: {response.status}")
+                    return None
+                
+                data = await response.json()
+                balances = data.get("balances", [])
+                
+                for balance in balances:
+                    if balance.get("jetton_address") == jetton_minter:
+                        return balance.get("wallet_address")
+                
+                logger.warning(f"No Jetton wallet found for {owner_address} and minter {jetton_minter}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Error fetching Jetton wallet address: {str(e)}")
+        return None
+
+def generate_message_hash(telegram_id: int, amount: int) -> str:
+    """
+    Generate a unique hash for a burn request, used for verification.
+    
+    Args:
+        telegram_id: The Telegram user ID
+        amount: The amount to burn
+        
+    Returns:
+        A unique hash string
+    """
+    # Generate a random string to make the hash unique
+    random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+    return f"burn_{telegram_id}_{amount}_{random_str}"
+
+async def prepare_burn_transaction(
+    jetton_wallet: str, 
+    amount: int, 
+    message_hash: str
+) -> Dict:
+    """
+    Prepare the burn transaction payload.
+    
+    Args:
+        jetton_wallet: The Jetton wallet address
+        amount: The amount to burn (in nanoTokens)
+        message_hash: A unique message hash for verification
+        
+    Returns:
+        Transaction payload ready for signing
+    """
+    # This is a simplified payload for the TON Connect SDK
+    # In a real implementation, you'd create the correct cell structure for the burn message
+    
+    burn_payload = {
+        "valid_until": int(time.time()) + 300,  # Valid for 5 minutes
+        "messages": [
+            {
+                "address": jetton_wallet,
+                "amount": "50000000",  # 0.05 TON for gas
+                "payload": {
+                    "op": 0x7bdd97de,  # burn opcode
+                    "query_id": 0,
+                    "amount": str(amount),
+                    "response_destination": "",
+                    "custom_payload": message_hash
+                }
+            }
+        ]
+    }
+    
+    return burn_payload
+
+async def burn_jetton(
+    owner_address: str, 
+    amount_to_burn: int, 
+    telegram_id: int = None,
+    use_wallet_signature: bool = True
+) -> str:
+    """
+    Burn Jetton tokens.
+    
+    Args:
+        owner_address: The TON wallet address of the owner
+        amount_to_burn: Amount to burn (in tokens, will be converted to nanoTokens)
+        telegram_id: The Telegram user ID for verification
+        use_wallet_signature: Whether to use wallet signature (True for non-custodial)
+        
+    Returns:
+        Transaction hash or empty string if failed
+    """
+    try:
+        # Convert to nanoTokens (assuming 9 decimals)
+        amount_nano = amount_to_burn * 1_000_000_000
+        
+        # Get the Jetton wallet address
+        jetton_wallet = await get_jetton_wallet_address(owner_address)
+        if not jetton_wallet:
+            logger.error(f"Failed to find Jetton wallet for {owner_address}")
+            return ""
+        
+        # Generate a unique message hash for verification
+        message_hash = generate_message_hash(telegram_id or 0, amount_to_burn)
+        
+        if use_wallet_signature:
+            # For non-custodial approach, we prepare the payload
+            # but rely on the web app to get the user signature
+            burn_payload = await prepare_burn_transaction(
+                jetton_wallet=jetton_wallet,
+                amount=amount_nano,
+                message_hash=message_hash
+            )
+            
+            # In a real implementation, you would:
+            # 1. Store the burn_payload and message_hash in a database
+            # 2. Return information to render the signing page in Telegram
+            # 3. Wait for callback from the web app with the signed transaction
+            # 4. Broadcast the signed transaction to the TON network
+            
+            # For demo, we just return the message hash as if it were a tx_hash
+            return f"pending_{message_hash}"
+        else:
+            # For custodial approach (NOT RECOMMENDED):
+            # Here you would sign with your own keys and broadcast
+            # This would require you to hold user funds which is not secure
+            logger.warning("Custodial burn not implemented - not recommended!")
+            return ""
+        
+    except Exception as e:
+        logger.error(f"Error in burn_jetton: {str(e)}")
+        return ""
 
 # --- END OF FILE ton_utils.py ---

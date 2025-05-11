@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect TON Wallet</title>
+    <script src="https://unpkg.com/@tonconnect/sdk@2.1.3/dist/tonconnect-sdk.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #F7F9FB;
+        }
+        .container {
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #222;
+        }
+        p {
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+        button {
+            background-color: #0088CC;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0077b5;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .success {
+            background-color: #e7f7ed;
+            color: #2e7d32;
+        }
+        .error {
+            background-color: #fdeded;
+            color: #d32f2f;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Connect Your TON Wallet</h1>
+        <p>Connect your wallet to use burn functionality with TONFANS Bot.</p>
+        
+        <button id="connectButton">Connect Wallet</button>
+        
+        <div id="statusMessage" class="status hidden"></div>
+    </div>
+
+    <script>
+        // Store the telegram_id from URL parameters
+        const telegramId = "{{ telegram_id }}";
+        const projectId = "{{ project_id }}";
+        const returnUrl = "{{ return_url }}";
+        
+        // Initialize TON Connect
+        const connector = new TonConnectSDK.TonConnect({
+            manifestUrl: 'https://raw.githubusercontent.com/ton-blockchain/wallet-list/main/wallet-list.json',
+            // Optional: provided by TON Connect after registering your app
+            projectId: projectId
+        });
+
+        const connectButton = document.getElementById('connectButton');
+        const statusMessage = document.getElementById('statusMessage');
+        
+        // Handle button click
+        connectButton.addEventListener('click', async () => {
+            try {
+                // Show connecting status
+                statusMessage.textContent = "Connecting to wallet...";
+                statusMessage.className = "status";
+                
+                // Generate connection link
+                const universalLink = connector.connect({
+                    universalLink: {
+                        url: returnUrl
+                    }
+                });
+                
+                // Open wallet
+                window.location.href = universalLink;
+                
+                // Listen for connection status
+                connector.onStatusChange(async (wallet) => {
+                    if (wallet) {
+                        // Connected successfully
+                        connectButton.style.display = 'none';
+                        statusMessage.textContent = "Wallet connected! Saving...";
+                        statusMessage.className = "status success";
+                        
+                        // Send wallet address to your backend
+                        const walletAddress = wallet.account.address;
+                        
+                        try {
+                            const response = await fetch('/ton-callback', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    telegram_id: telegramId,
+                                    wallet_address: walletAddress
+                                })
+                            });
+                            
+                            if (response.ok) {
+                                statusMessage.textContent = "Wallet connected successfully! You can now close this page and return to Telegram.";
+                                // Optionally, can redirect back to Telegram after a short delay
+                                setTimeout(() => {
+                                    window.close();
+                                    // Or redirect to Telegram app
+                                    window.location.href = "https://t.me/your_bot_username";
+                                }, 3000);
+                            } else {
+                                throw new Error('Server error');
+                            }
+                        } catch (error) {
+                            statusMessage.textContent = "Error saving wallet connection. Please try again.";
+                            statusMessage.className = "status error";
+                            connectButton.style.display = 'block';
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                statusMessage.textContent = "Error connecting to wallet. Please try again.";
+                statusMessage.className = "status error";
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html> 

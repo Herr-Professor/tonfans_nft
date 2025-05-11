@@ -5,3 +5,8 @@ tonsdk
 aiohttp
 aiosqlite
 pytz
+fastapi
+uvicorn
+jinja2
+pydantic
+python-multipart

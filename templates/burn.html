@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Burn Tokens</title>
+    <script src="https://unpkg.com/@tonconnect/sdk@2.1.3/dist/tonconnect-sdk.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #F7F9FB;
+        }
+        .container {
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #222;
+        }
+        .amount {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 20px 0;
+            color: #D32F2F;
+        }
+        p {
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+        .warning {
+            background-color: #fff8e1;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-bottom: 20px;
+            text-align: left;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #D32F2F;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #b71c1c;
+        }
+        .cancel {
+            background-color: transparent;
+            color: #666;
+            border: 1px solid #ccc;
+        }
+        .cancel:hover {
+            background-color: #f5f5f5;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .success {
+            background-color: #e7f7ed;
+            color: #2e7d32;
+        }
+        .error {
+            background-color: #fdeded;
+            color: #d32f2f;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Burn TONFANS Tokens</h1>
+        
+        <div class="amount">{{ amount }} TOKENS</div>
+        
+        <div class="warning">
+            <strong>Warning:</strong> This action is irreversible. Burning tokens permanently removes them from circulation.
+        </div>
+        
+        <p>Confirm that you want to burn these tokens from your wallet. This transaction requires your signature.</p>
+        
+        <button id="burnButton">Confirm Burn</button>
+        <button id="cancelButton" class="cancel">Cancel</button>
+        
+        <div id="statusMessage" class="status hidden"></div>
+    </div>
+
+    <script>
+        // Store data from URL parameters
+        const telegramId = "{{ telegram_id }}";
+        const amount = "{{ amount }}";
+        const projectId = "{{ project_id }}";
+        
+        // Elements
+        const burnButton = document.getElementById('burnButton');
+        const cancelButton = document.getElementById('cancelButton');
+        const statusMessage = document.getElementById('statusMessage');
+        
+        // Initialize TON Connect
+        const connector = new TonConnectSDK.TonConnect({
+            manifestUrl: 'https://raw.githubusercontent.com/ton-blockchain/wallet-list/main/wallet-list.json',
+            projectId: projectId
+        });
+        
+        // Connect to wallet first
+        async function connectWallet() {
+            try {
+                // Check if we're already connected
+                const walletInfo = connector.wallet;
+                if (walletInfo) {
+                    return walletInfo.account.address;
+                }
+                
+                // Otherwise connect
+                statusMessage.textContent = "Please connect your wallet first...";
+                statusMessage.className = "status";
+                
+                // Generate connection link and request connection
+                const universalLink = connector.connect({
+                    universalLink: true,
+                    bridgeUrl: true
+                });
+                
+                window.location.href = universalLink;
+                
+                // Wait for connection
+                return new Promise((resolve) => {
+                    connector.onStatusChange((wallet) => {
+                        if (wallet) {
+                            statusMessage.textContent = "Wallet connected, preparing transaction...";
+                            resolve(wallet.account.address);
+                        }
+                    });
+                });
+            } catch (error) {
+                statusMessage.textContent = "Error connecting to wallet. Please try again.";
+                statusMessage.className = "status error";
+                console.error(error);
+                throw error;
+            }
+        }
+        
+        // Handle burn action
+        burnButton.addEventListener('click', async () => {
+            try {
+                // First make sure we're connected
+                const walletAddress = await connectWallet();
+                
+                // Prepare burn transaction
+                statusMessage.textContent = "Preparing transaction...";
+                statusMessage.className = "status";
+                
+                // In a real implementation, this would prepare the actual transaction
+                // For this demo, we'll just simulate the transaction
+                
+                // Send the signed transaction to the backend
+                const response = await fetch('/burn-callback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        telegram_id: telegramId,
+                        amount: amount,
+                        wallet_address: walletAddress
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    statusMessage.textContent = `Tokens burned successfully! Transaction: ${result.tx_hash}`;
+                    statusMessage.className = "status success";
+                    burnButton.style.display = 'none';
+                    
+                    // Redirect back to Telegram after short delay
+                    setTimeout(() => {
+                        window.close();
+                        window.location.href = "https://t.me/your_bot_username";
+                    }, 3000);
+                } else {
+                    throw new Error('Server error');
+                }
+            } catch (error) {
+                statusMessage.textContent = "Error burning tokens. Please try again.";
+                statusMessage.className = "status error";
+                console.error(error);
+            }
+        });
+        
+        // Handle cancel button
+        cancelButton.addEventListener('click', () => {
+            window.close();
+            // Or redirect back to Telegram
+            window.location.href = "https://t.me/your_bot_username";
+        });
+    </script>
+</body>
+</html> 

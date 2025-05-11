@@ -14,7 +14,8 @@ from aiogram.types import (
     ReplyKeyboardMarkup, 
     KeyboardButton,
     ReplyKeyboardRemove,
-    FSInputFile
+    FSInputFile,
+    WebAppInfo
 )
 from aiogram.filters import Command, ChatMemberUpdatedFilter, KICKED, LEFT 
 from aiogram.fsm.state import State, StatesGroup
@@ -122,8 +123,8 @@ MESSAGES = {
         'ru': """🖼 *Как купить TONFANS NFT*\n\n1️⃣ Получите монеты TON на любой бирже\n2️⃣ Переведите TON на свой кошелек\n3️⃣ Перейдите на GetGems по ссылке ниже\n4️⃣ Подключите свой кошелек\n5️⃣ Выберите свой любимый NFT\n\n*Адрес коллекции:*\n`{}`\n\nНажмите на кнопку ниже, чтобы посмотреть коллекцию! 🎨"""
     },
     'help_message': {
-        'en': """🤖 *Available Commands*\n\n*Basic Commands:*\n/start - Start the bot and begin verification\n/help - Show this help message\n\n*Verification Commands:*\n/wallet - Submit your wallet address\n/verify - Verify your NFT ownership\n\n*Token Commands:*\n/whale - Check if you qualify as a whale\n/price - Check current SHIVA token price\n/top - View top SHIVA token holders\n\n*Purchase Information:*\n/buy - Learn how to buy SHIVA tokens\n/nft - Learn how to buy TONFANS NFTs\n\nNeed assistance? Start with /start to begin the verification process!""",
-        'ru': """🤖 *Доступные команды*\n\n*Основные команды:*\n/start - Запустить бота и начать верификацию\n/help - Показать это сообщение\n\n*Команды верификации:*\n/wallet - Отправить адрес кошелька\n/verify - Проверить владение NFT\n\n*Токен-команды:*\n/whale - Проверить, являетесь ли вы китом\n/price - Узнать текущую цену SHIVA\n/top - Посмотреть топ холдеров SHIVA\n\n*Покупка:*\n/buy - Как купить SHIVA\n/nft - Как купить TONFANS NFT\n\nНужна помощь? Начните с /start!"""
+        'en': """🤖 *Available Commands*\n\n*Basic Commands:*\n/start - Start the bot and begin verification\n/help - Show this help message\n\n*Verification Commands:*\n/wallet - Submit your wallet address\n/verify - Verify your NFT ownership\n\n*Token Commands:*\n/whale - Check if you qualify as a whale\n/price - Check current SHIVA token price\n/top - View top SHIVA token holders\n\n*Purchase Information:*\n/buy - Learn how to buy SHIVA tokens\n/nft - Learn how to buy TONFANS NFTs\n\n*TON Connect:*\n/connect - Connect your wallet via TON Connect\n/wallet_info - View your connected wallet info\n/burn - Burn tokens from your wallet\n/disconnect - Disconnect your wallet\n\nNeed assistance? Start with /start to begin the verification process!""",
+        'ru': """🤖 *Доступные команды*\n\n*Основные команды:*\n/start - Запустить бота и начать верификацию\n/help - Показать это сообщение\n\n*Команды верификации:*\n/wallet - Отправить адрес кошелька\n/verify - Проверить владение NFT\n\n*Токен-команды:*\n/whale - Проверить, являетесь ли вы китом\n/price - Узнать текущую цену SHIVA\n/top - Посмотреть топ холдеров SHIVA\n\n*Покупка:*\n/buy - Как купить SHIVA\n/nft - Как купить TONFANS NFT\n\n*TON Connect:*\n/connect - Подключить кошелек через TON Connect\n/wallet_info - Просмотреть информацию о подключенном кошельке\n/burn - Сжечь токены из вашего кошелька\n/disconnect - Отключить ваш кошелек\n\nНужна помощь? Начните с /start!"""
     },
     'please_wait': {
         'en': "Please wait...",
@@ -172,6 +173,30 @@ MESSAGES = {
     'fetching_top_holders': {
         'en': "🔍 Fetching top SHIVA holders...",
         'ru': "🔍 Получаю топ держателей SHIVA..."
+    },
+    'wallet_connected': {
+        'en': "✅ Wallet connected: `{}`",
+        'ru': "✅ Кошелек подключен: `{}`"
+    },
+    'wallet_disconnected': {
+        'en': "Wallet disconnected.",
+        'ru': "Кошелек отключен."
+    },
+    'connect_wallet': {
+        'en': "Connect your wallet to use burn functionality.",
+        'ru': "Подключите ваш кошелек, чтобы использовать функцию сжигания."
+    },
+    'burn_confirmation': {
+        'en': "⚠️ You are about to burn {} tokens. This action is irreversible. Type /confirm_{} to proceed or /cancel to abort.",
+        'ru': "⚠️ Вы собираетесь сжечь {} токенов. Это действие необратимо. Введите /confirm_{} для продолжения или /cancel для отмены."
+    },
+    'burn_success': {
+        'en': "✅ Successfully burned {} tokens!\n\nTransaction hash: `{}`",
+        'ru': "✅ Успешно сожжено {} токенов!\n\nХеш транзакции: `{}`"
+    },
+    'burn_cancelled': {
+        'en': "Burn request cancelled.",
+        'ru': "Запрос на сжигание отменен."
     }
 }
 
@@ -203,6 +228,15 @@ async def setup_database():
                 username TEXT,            -- Store last known username for convenience
                 message_count INTEGER DEFAULT 0,
                 PRIMARY KEY (user_id, year_month)
+            )
+        ''')
+        # Add new table for TON Connect wallet connections
+        await cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_wallets (
+                telegram_id INTEGER PRIMARY KEY,
+                wallet_addr TEXT NOT NULL, 
+                connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         # --------------------------
@@ -773,12 +807,250 @@ async def help_command(message: Message, state: FSMContext):
         parse_mode="MarkdownV2"
     )
 
+# === TON Connect Wallet Integration Commands ===
+
+TON_CONNECT_URL = "https://your-domain.com"  # Update with your actual domain
+
+@dp.message(Command('connect'))
+async def connect_command(message: Message, state: FSMContext):
+    """Connect user wallet via TON Connect"""
+    user_id = message.from_user.id
+    username = message.from_user.username
+    lang = await get_lang(state, message.from_user.id)
+    
+    # Check if already connected
+    wallet = await get_user_wallet(user_id)
+    if wallet:
+        await message.reply(
+            escape_md(f"Your wallet is already connected: `{wallet}`\nUse /disconnect if you want to connect a different wallet."),
+            parse_mode="MarkdownV2"
+        )
+        return
+        
+    # Create web app URL for TON Connect
+    connect_url = f"{TON_CONNECT_URL}/ton-connect?telegram_id={user_id}"
+    
+    # Send button that opens the web app
+    await message.reply(
+        escape_md("Click below to connect your TON wallet:"),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Connect Wallet", web_app=WebAppInfo(url=connect_url))]
+        ]),
+        parse_mode="MarkdownV2"
+    )
+
+@dp.message(Command('disconnect'))
+async def disconnect_command(message: Message):
+    """Disconnect user wallet"""
+    user_id = message.from_user.id
+    
+    # Check if a wallet is connected
+    wallet = await get_user_wallet(user_id)
+    if not wallet:
+        await message.reply(
+            escape_md("You don't have a wallet connected. Use /connect to connect your wallet."),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    # Remove from database
+    async with aiosqlite.connect('members.db') as conn:
+        cursor = await conn.cursor()
+        await cursor.execute('DELETE FROM user_wallets WHERE telegram_id = ?', (user_id,))
+        await conn.commit()
+    
+    await message.reply(
+        escape_md("Your wallet has been disconnected. Use /connect to connect a new wallet."),
+        parse_mode="MarkdownV2"
+    )
+
+@dp.message(Command('wallet_info'))
+async def wallet_info_command(message: Message):
+    """Show user connected wallet info"""
+    user_id = message.from_user.id
+    
+    # Get connected wallet
+    wallet = await get_user_wallet(user_id)
+    if not wallet:
+        await message.reply(
+            escape_md("You don't have a wallet connected. Use /connect to connect your wallet."),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    # Get balance info for the connected wallet if available
+    raw_balance, formatted_balance, price_data = await check_token_balance(wallet, SHIVA_TOKEN_ADDRESS)
+    
+    # Format the response
+    info_text = f"Connected Wallet: `{wallet}`\n\n"
+    if formatted_balance > 0:
+        info_text += f"SHIVA Balance: {formatted_balance:,.2f} tokens"
+    else:
+        info_text += "SHIVA Balance: 0 tokens"
+    
+    await message.reply(
+        escape_md(info_text),
+        parse_mode="MarkdownV2"
+    )
+
+@dp.message(Command('burn'))
+async def burn_command(message: Message):
+    """Initiate token burn process"""
+    user_id = message.from_user.id
+    
+    # Check for connected wallet
+    wallet = await get_user_wallet(user_id)
+    if not wallet:
+        await message.reply(
+            escape_md("You need to connect your wallet first. Use /connect to connect your wallet."),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    # Parse the amount from arguments
+    args = message.text.split()
+    if len(args) != 2:
+        await message.reply(
+            escape_md("Usage: /burn <amount>\nExample: /burn 100"),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        amount = int(args[1])
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+    except ValueError:
+        await message.reply(
+            escape_md("Invalid amount. Please provide a positive number."),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    # Check balance to make sure user has enough tokens
+    _, balance, _ = await check_token_balance(wallet, SHIVA_TOKEN_ADDRESS)
+    if balance < amount:
+        await message.reply(
+            escape_md(f"You don't have enough tokens. Your balance: {balance:,.2f}"),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    # Store the pending burn request
+    pending_burns[user_id] = amount
+    
+    # Confirm with the user
+    await message.reply(
+        escape_md(f"⚠️ You are about to burn {amount} tokens permanently.\n\nThis action is irreversible.\n\nType /confirm_{amount} to proceed or /cancel to abort."),
+        parse_mode="MarkdownV2"
+    )
+
+@dp.message(lambda message: message.text and message.text.startswith('/confirm_'))
+async def confirm_burn_command(message: Message):
+    """Confirm and execute token burn"""
+    user_id = message.from_user.id
+    
+    # Extract amount from command
+    try:
+        amount = int(message.text.split('_')[1])
+    except (IndexError, ValueError):
+        await message.reply(
+            escape_md("Invalid confirmation command. Please use the exact command provided."),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    # Check if there is a pending burn request
+    if user_id not in pending_burns or pending_burns[user_id] != amount:
+        await message.reply(
+            escape_md("No matching burn request found. Please use /burn <amount> first."),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    # Get user wallet
+    wallet = await get_user_wallet(user_id)
+    if not wallet:
+        await message.reply(
+            escape_md("Your wallet connection has been lost. Please use /connect to reconnect."),
+            parse_mode="MarkdownV2"
+        )
+        pending_burns.pop(user_id, None)
+        return
+    
+    # Create web app URL for burn confirmation
+    burn_url = f"{TON_CONNECT_URL}/ton-burn?telegram_id={user_id}&amount={amount}"
+    
+    # Send button that opens the burn confirmation web app
+    await message.reply(
+        escape_md(f"You're about to burn {amount} tokens. Please confirm the transaction in your wallet:"),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"Burn {amount} Tokens", web_app=WebAppInfo(url=burn_url))]
+        ]),
+        parse_mode="MarkdownV2"
+    )
+    
+    # Note: The actual burn will be completed when the user signs the transaction
+    # in the web app and the callback is received. We'll keep the pending burn
+    # in memory until then.
+
+@dp.message(Command('cancel'))
+async def cancel_burn_command(message: Message):
+    """Cancel pending burn request"""
+    user_id = message.from_user.id
+    
+    if user_id in pending_burns:
+        amount = pending_burns.pop(user_id)
+        await message.reply(
+            escape_md(f"Burn request for {amount} tokens has been cancelled."),
+            parse_mode="MarkdownV2"
+        )
+    else:
+        await message.reply(
+            escape_md("No pending burn request to cancel."),
+            parse_mode="MarkdownV2"
+        )
+
+# Endpoint to receive burn transaction results
+async def handle_burn_result(request):
+    """Web endpoint to receive burn transaction results"""
+    data = await request.json()
+    telegram_id = data.get('telegram_id')
+    tx_hash = data.get('tx_hash')
+    status = data.get('status')
+    
+    if telegram_id and tx_hash and status == 'success':
+        # Get the amount from pending burns
+        amount = pending_burns.pop(int(telegram_id), None)
+        if amount:
+            # Notify the user about successful burn
+            await bot.send_message(
+                chat_id=telegram_id,
+                text=escape_md(f"✅ Successfully burned {amount} tokens!\n\nTransaction hash: `{tx_hash}`"),
+                parse_mode="MarkdownV2"
+            )
+            
+            # Notify admins
+            for admin_id in ADMIN_IDS:
+                try:
+                    await bot.send_message(
+                        chat_id=admin_id,
+                        text=escape_md(f"🔥 User {telegram_id} burned {amount} tokens\nTransaction: `{tx_hash}`"),
+                        parse_mode="MarkdownV2"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify admin {admin_id}: {e}")
+    
+    return web.Response(text="OK")
+
 async def health_check(request):
     return web.Response(text="OK")
 
 async def start_http_server():
     app = web.Application()
     app.router.add_get('/health', health_check)
+    # Add new endpoint for burn result
+    app.router.add_post('/burn-result', handle_burn_result)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 8000)
@@ -942,6 +1214,41 @@ If you believe this is a mistake, please reverify your wallet again."""
                 await bot_instance.send_message(admin_id, admin_msg_text, parse_mode="MarkdownV2")
             except Exception as e:
                 logger.error(f"Failed to notify admin {admin_id}: {e}")
+
+# TON Connect wallet functions
+async def get_user_wallet(telegram_id: int) -> str:
+    """Get connected wallet address for a telegram user."""
+    async with aiosqlite.connect('members.db') as conn:
+        cursor = await conn.cursor()
+        await cursor.execute('SELECT wallet_addr FROM user_wallets WHERE telegram_id = ?', (telegram_id,))
+        result = await cursor.fetchone()
+        return result[0] if result else None
+
+async def save_user_wallet(telegram_id: int, wallet_addr: str) -> bool:
+    """Save or update user's connected wallet."""
+    try:
+        async with aiosqlite.connect('members.db') as conn:
+            cursor = await conn.cursor()
+            await cursor.execute('''
+                INSERT OR REPLACE INTO user_wallets 
+                (telegram_id, wallet_addr, connected_at, last_used)
+                VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ''', (telegram_id, wallet_addr))
+            await conn.commit()
+            return True
+    except Exception as e:
+        logger.error(f"Error saving user wallet: {e}")
+        return False
+
+async def update_wallet_used(telegram_id: int) -> None:
+    """Update the last_used timestamp for a wallet."""
+    async with aiosqlite.connect('members.db') as conn:
+        cursor = await conn.cursor()
+        await cursor.execute('UPDATE user_wallets SET last_used = CURRENT_TIMESTAMP WHERE telegram_id = ?', (telegram_id,))
+        await conn.commit()
+
+# Store pending burn requests
+pending_burns = {}  # telegram_id -> amount
 
 async def main():
     print("Starting NFT Checker Bot...")
